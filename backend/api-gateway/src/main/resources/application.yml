@@ -1,0 +1,65 @@
+# Configura el API Gateway y sus rutas hacia hospital-service mediante Consul.
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    consul:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        service-name: api-gateway
+        instance-id: ${spring.application.name}-${server.port}
+        register: true
+        fail-fast: false
+        health-check-path: /actuator/health
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        cors-configurations:
+          "[/**]":
+            allowed-origins:
+              - "http://localhost:5173"
+              - "http://127.0.0.1:5173"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowed-headers: "*"
+            allow-credentials: false
+      routes:
+        - id: hospitales
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/hospitals/**
+        - id: nodos
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/nodes/**
+        - id: logs
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/logs/**
+        - id: eleccion
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/election/**
+        - id: simulacion
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/simulation/**
+        - id: donantes
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/donors/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

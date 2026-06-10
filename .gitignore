@@ -1,0 +1,47 @@
+# Java y Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+
+# Node, React y Vite
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Variables de entorno
+.env
+.env.*
+!.env.example
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# VS Code
+.vscode/
+
+# Archivos temporales y sistema operativo
+*.log
+*.pid
+*.tmp
+*.temp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Cobertura y reportes
+coverage/
+surefire-reports/
+failsafe-reports/

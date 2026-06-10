@@ -1,0 +1,43 @@
+# Configura cada nodo hospitalario, Consul, tiempos de coordinacion y health checks.
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  application:
+    name: hospital-service
+  cloud:
+    consul:
+      host: ${CONSUL_HOST:localhost}
+      port: ${CONSUL_PORT:8500}
+      discovery:
+        service-name: hospital-service
+        instance-id: ${spring.application.name}-${node.id}
+        register: true
+        fail-fast: false
+        health-check-path: /actuator/health
+        prefer-ip-address: true
+
+node:
+  id: ${NODE_ID:1}
+  host: ${NODE_HOST:localhost}
+
+tcp:
+  port: ${TCP_PORT:9001}
+  connect-timeout-ms: 800
+  read-timeout-ms: 1200
+
+nodes:
+  config-file: ${NODES_CONFIG_FILE:nodes.json}
+
+coordinacion:
+  heartbeat-ms: 2000
+  timeout-heartbeat-ms: 5000
+  espera-respuesta-eleccion-ms: 1800
+  sincronizacion-cristian-ms: 8000
+  maximo-logs: 300
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
