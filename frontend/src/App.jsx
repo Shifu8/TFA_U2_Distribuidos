@@ -12,6 +12,7 @@ import {
   Power,
   RadioTower,
   RefreshCw,
+  RotateCcw,
   Send,
   Server,
   ShieldCheck,
@@ -138,6 +139,11 @@ function App() {
       return fetchJson(`/api/simulation/fail/${id}`, { method: 'POST' });
     });
 
+  const recuperarNodoPorId = (id) =>
+    ejecutarAccion(`recuperacion-${id}`, () =>
+      fetchJson(`/api/simulation/recover/${id}`, { method: 'POST' })
+    );
+
   const enviarConsultaDonante = (event) => {
     event.preventDefault();
     ejecutarAccion('donante', async () => {
@@ -233,6 +239,7 @@ function App() {
               esCoordinador={nodo.rol === 'COORDINADOR'}
               accion={accion}
               onFallar={() => fallarNodo(nodo.id)}
+              onRecuperar={() => recuperarNodoPorId(nodo.id)}
             />
           ))}
         </AnimatePresence>
@@ -372,7 +379,7 @@ function PanelMetrica({ icono, etiqueta, valor, tono }) {
   );
 }
 
-function NodoCard({ nodo, esCoordinador, accion, onFallar }) {
+function NodoCard({ nodo, esCoordinador, accion, onFallar, onRecuperar }) {
   const activo = nodo.estado === 'ACTIVO';
   return (
     <motion.article
@@ -403,7 +410,10 @@ function NodoCard({ nodo, esCoordinador, accion, onFallar }) {
           <Power size={15} />
           Fallar
         </button>
-
+        <button className="mini-button ok" onClick={onRecuperar} disabled={activo || Boolean(accion)}>
+          <RotateCcw size={15} />
+          Recuperar
+        </button>
       </div>
     </motion.article>
   );
