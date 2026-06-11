@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @CrossOrigin
 @RestController
-@RequestMapping("/api/election")
+@RequestMapping({"/api/election", "/eleccion"})
 public class ControladorEleccion {
 
     private final ServicioRedHospitalaria servicioRedHospitalaria;
@@ -21,7 +21,7 @@ public class ControladorEleccion {
         this.servicioRedHospitalaria = servicioRedHospitalaria;
     }
 
-    @PostMapping("/start")
+    @PostMapping({"/start", "/iniciar"})
     public RespuestaOperacionDto iniciar() {
         return new RespuestaOperacionDto(true, servicioRedHospitalaria.iniciarEleccionManual());
     }

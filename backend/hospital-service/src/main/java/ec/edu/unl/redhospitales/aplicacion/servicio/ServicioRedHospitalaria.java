@@ -7,6 +7,8 @@ import ec.edu.unl.redhospitales.dominio.enumeracion.EstadoNodo;
 import ec.edu.unl.redhospitales.dominio.enumeracion.RolNodo;
 import ec.edu.unl.redhospitales.dominio.enumeracion.TipoMensaje;
 import ec.edu.unl.redhospitales.dominio.modelo.EventoSistema;
+import ec.edu.unl.redhospitales.dominio.modelo.EstadoCristian;
+import ec.edu.unl.redhospitales.dominio.modelo.EstadoExclusionMutua;
 import ec.edu.unl.redhospitales.dominio.modelo.MensajeTcp;
 import ec.edu.unl.redhospitales.dominio.modelo.NodoHospitalario;
 import ec.edu.unl.redhospitales.dominio.modelo.ResultadoCompatibilidad;
@@ -59,9 +61,15 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     private final Set<Integer> respuestasEleccion = ConcurrentHashMap.newKeySet();
     private final Map<String, Long> solicitudesCristian = new ConcurrentHashMap<>();
     private final AtomicBoolean eleccionEnCurso = new AtomicBoolean(false);
+    private final GestorConcurrencia gestorConcurrencia = GestorConcurrencia.obtenerInstancia();
 
     private volatile boolean nodoLocalOperativo = true;
     private volatile int idCoordinadorActual = -1;
+    private volatile EstadoCristian ultimoEstadoCristian = new EstadoCristian();
+    private volatile boolean solicitudExclusionPendiente = false;
+    private volatile boolean accesoExclusionConcedido = false;
+
+    private static final String RECURSO_CRITICO = "directorio-donantes";
 
     public ServicioRedHospitalaria(
             PuertoConfiguracionNodos configuracionNodos,
@@ -99,6 +107,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
         idCoordinadorActual = nodos.keySet().stream().max(Integer::compareTo).orElse(configuracionNodoLocal.getId());
         aplicarRolCoordinador(idCoordinadorActual);
+        if (esCoordinadorLocal()) {
+            gestorConcurrencia.reiniciar();
+        }
         registrar("INICIO", "Nodo " + configuracionNodoLocal.getId() + " iniciado. Coordinador inicial: nodo " + idCoordinadorActual);
     }
 
@@ -137,6 +148,18 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         return registroEventos.listar();
     }
 
+    public List<EventoSistema> listarEventos(String algoritmo) {
+        List<EventoSistema> eventos = listarEventos();
+        if (algoritmo == null || algoritmo.isBlank() || algoritmo.equalsIgnoreCase("todos")) {
+            return eventos;
+        }
+
+        String categoria = algoritmo.trim().toUpperCase(Locale.ROOT);
+        return eventos.stream()
+                .filter(evento -> coincideCategoria(evento.getCategoria(), categoria))
+                .toList();
+    }
+
     public NodoHospitalario obtenerNodoLocal() {
         return nodoLocal().copiar();
     }
@@ -148,6 +171,156 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     public String iniciarEleccionManual() {
         iniciarEleccion("eleccion manual solicitada por API");
         return "Eleccion Bully solicitada desde nodo " + configuracionNodoLocal.getId();
+    }
+
+    public String sincronizarCristianManual() {
+        if (solicitarSincronizacionCristian("sincronizacion manual solicitada por API")) {
+            return "Sincronizacion Cristian solicitada desde nodo " + configuracionNodoLocal.getId();
+        }
+        return "No se pudo solicitar sincronizacion Cristian desde nodo " + configuracionNodoLocal.getId();
+    }
+
+    public String sincronizarCristianManual(int nodeId) {
+        if (nodeId == configuracionNodoLocal.getId()) {
+            return sincronizarCristianManual();
+        }
+
+        NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        boolean enviada = controlRemotoNodos.solicitarSincronizacionCristian(nodo);
+        registrar("CRISTIAN", "Solicitud remota de sincronizacion enviada al nodo " + nodeId + ". Resultado: " + enviada);
+        return enviada
+                ? "Sincronizacion Cristian solicitada en nodo " + nodeId
+                : "No se pudo solicitar sincronizacion Cristian en nodo " + nodeId;
+    }
+
+    public EstadoCristian obtenerEstadoCristian() {
+        EstadoCristian estado = ultimoEstadoCristian;
+        return new EstadoCristian(
+                reloj.ahora(),
+                estado.getHoraCoordinador(),
+                estado.getHoraAjustada(),
+                estado.getRttMs(),
+                estado.getLatenciaMs(),
+                configuracionCoordinacion.isAjustarRelojSistema(),
+                estado.isRelojSistemaAjustado()
+        );
+    }
+
+    public String solicitarExclusionMutua() {
+        if (!estaOperativo()) {
+            return "Nodo local inactivo: no puede solicitar seccion critica";
+        }
+
+        if (esCoordinadorLocal()) {
+            registrar("EXCLUSION", "Nodo coordinador solicita acceso local a " + RECURSO_CRITICO);
+            procesarSolicitudMutexLocal(configuracionNodoLocal.getId());
+            return "Solicitud de exclusion mutua procesada por el coordinador local";
+        }
+
+        Optional<NodoHospitalario> coordinador = obtenerCoordinador();
+        if (coordinador.isEmpty()) {
+            return "No existe coordinador disponible para solicitar exclusion mutua";
+        }
+
+        solicitudExclusionPendiente = true;
+        boolean enviada = enviarMensaje(coordinador.get(), TipoMensaje.MUTEX_REQUEST, RECURSO_CRITICO + "|" + UUID.randomUUID());
+        if (!enviada) {
+            solicitudExclusionPendiente = false;
+            return "No se pudo enviar MUTEX_REQUEST al coordinador";
+        }
+
+        registrar("EXCLUSION", "MUTEX_REQUEST enviado al coordinador nodo " + coordinador.get().getId());
+        return "Solicitud de seccion critica enviada al coordinador nodo " + coordinador.get().getId();
+    }
+
+    public String solicitarExclusionMutua(int nodeId) {
+        if (nodeId == configuracionNodoLocal.getId()) {
+            return solicitarExclusionMutua();
+        }
+
+        NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        boolean enviada = controlRemotoNodos.solicitarExclusion(nodo);
+        registrar("EXCLUSION", "Solicitud remota de exclusion enviada al nodo " + nodeId + ". Resultado: " + enviada);
+        return enviada
+                ? "Solicitud de seccion critica enviada al nodo " + nodeId
+                : "No se pudo solicitar seccion critica en nodo " + nodeId;
+    }
+
+    public String liberarExclusionMutua() {
+        if (!estaOperativo()) {
+            return "Nodo local inactivo: no puede liberar seccion critica";
+        }
+
+        if (esCoordinadorLocal()) {
+            liberarMutexDesdeNodo(configuracionNodoLocal.getId());
+            return "Seccion critica liberada desde el coordinador local";
+        }
+
+        Optional<NodoHospitalario> coordinador = obtenerCoordinador();
+        if (coordinador.isEmpty()) {
+            return "No existe coordinador disponible para liberar exclusion mutua";
+        }
+
+        accesoExclusionConcedido = false;
+        solicitudExclusionPendiente = false;
+        boolean enviada = enviarMensaje(coordinador.get(), TipoMensaje.MUTEX_RELEASE, RECURSO_CRITICO);
+        if (!enviada) {
+            return "No se pudo enviar MUTEX_RELEASE al coordinador";
+        }
+
+        registrar("EXCLUSION", "MUTEX_RELEASE enviado al coordinador nodo " + coordinador.get().getId());
+        return "Liberacion de seccion critica enviada al coordinador nodo " + coordinador.get().getId();
+    }
+
+    public String liberarExclusionMutua(int nodeId) {
+        if (nodeId == configuracionNodoLocal.getId()) {
+            return liberarExclusionMutua();
+        }
+
+        NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        boolean enviada = controlRemotoNodos.liberarExclusion(nodo);
+        registrar("EXCLUSION", "Solicitud remota de liberacion enviada al nodo " + nodeId + ". Resultado: " + enviada);
+        return enviada
+                ? "Liberacion de seccion critica enviada al nodo " + nodeId
+                : "No se pudo liberar seccion critica en nodo " + nodeId;
+    }
+
+    public EstadoExclusionMutua obtenerEstadoExclusionMutua() {
+        if (esCoordinadorLocal()) {
+            return obtenerEstadoExclusionMutuaLocal();
+        }
+
+        return obtenerCoordinador()
+                .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
+                .flatMap(consultaRemotaNodos::consultarEstadoExclusionLocal)
+                .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
+    }
+
+    public EstadoExclusionMutua obtenerEstadoExclusionMutuaLocal() {
+        Integer nodoEnSeccion = esCoordinadorLocal() ? gestorConcurrencia.getNodoEnSeccionCritica() : null;
+        List<Integer> cola = esCoordinadorLocal() ? gestorConcurrencia.snapshotCola() : List.of();
+        boolean ocupado = nodoEnSeccion != null;
+        String estadoLocal;
+        if (accesoExclusionConcedido) {
+            estadoLocal = "EN_SECCION_CRITICA";
+        } else if (solicitudExclusionPendiente) {
+            estadoLocal = "ESPERANDO";
+        } else {
+            estadoLocal = "LIBRE";
+        }
+
+        return new EstadoExclusionMutua(
+                configuracionNodoLocal.getId(),
+                idCoordinadorActual,
+                esCoordinadorLocal(),
+                ocupado,
+                nodoEnSeccion,
+                cola,
+                solicitudExclusionPendiente,
+                accesoExclusionConcedido,
+                RECURSO_CRITICO,
+                estadoLocal
+        );
     }
 
     public String simularCaida(int nodeId) {
@@ -237,7 +410,6 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return;
         }
 
-        nodoLocal().observarLamport(mensaje.getTiempoLamport());
         NodoHospitalario origen = nodos.get(mensaje.getIdNodoOrigen());
         if (origen != null) {
             origen.actualizarSenal();
@@ -250,6 +422,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             case COORDINATOR -> procesarCoordinator(mensaje);
             case SYNC_TIME_REQUEST -> procesarSyncTimeRequest(mensaje);
             case SYNC_TIME_RESPONSE -> procesarSyncTimeResponse(mensaje);
+            case MUTEX_REQUEST -> procesarMutexRequest(mensaje);
+            case MUTEX_GRANT -> procesarMutexGrant(mensaje);
+            case MUTEX_RELEASE -> procesarMutexRelease(mensaje);
             case DONOR_REQUEST -> procesarDonorRequest(mensaje);
             case DONOR_RESPONSE -> registrar("DONANTES", "Respuesta de donante recibida desde nodo " + mensaje.getIdNodoOrigen()
                     + ": " + mensaje.getContenido());
@@ -295,18 +470,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
     @Scheduled(fixedDelayString = "${coordinacion.sincronizacion-cristian-ms:8000}", initialDelay = 4000)
     public void sincronizarCristianProgramado() {
-        if (!estaOperativo() || esCoordinadorLocal()) {
-            return;
-        }
-
-        NodoHospitalario coordinador = nodos.get(idCoordinadorActual);
-        if (coordinador == null || !coordinador.esActivo()) {
-            return;
-        }
-
-        String solicitudId = UUID.randomUUID().toString();
-        solicitudesCristian.put(solicitudId, System.currentTimeMillis());
-        enviarMensaje(coordinador, TipoMensaje.SYNC_TIME_REQUEST, solicitudId);
+        solicitarSincronizacionCristian("sincronizacion programada");
     }
 
     private void iniciarEleccion(String motivo) {
@@ -360,6 +524,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
 
         idCoordinadorActual = configuracionNodoLocal.getId();
+        gestorConcurrencia.reiniciar();
+        solicitudExclusionPendiente = false;
+        accesoExclusionConcedido = false;
         aplicarRolCoordinador(idCoordinadorActual);
         registrar("BULLY", "Nodo " + configuracionNodoLocal.getId() + " se declara COORDINADOR");
 
@@ -412,6 +579,8 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         idCoordinadorActual = mensaje.getIdNodoOrigen();
         aplicarRolCoordinador(idCoordinadorActual);
         eleccionEnCurso.set(false);
+        solicitudExclusionPendiente = false;
+        accesoExclusionConcedido = false;
         NodoHospitalario coordinador = nodos.get(idCoordinadorActual);
         if (coordinador != null) {
             coordinador.actualizarSenal();
@@ -449,11 +618,96 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         Instant horaLocal = Instant.ofEpochMilli(recepcionMs);
         Instant horaCoordinador = Instant.ofEpochMilli(Long.parseLong(partes[1]));
         Instant horaAjustada = horaCoordinador.plusMillis(latencia);
+        boolean relojSistemaAjustado = false;
+        if (configuracionCoordinacion.isAjustarRelojSistema()) {
+            relojSistemaAjustado = reloj.ajustarSistema(horaAjustada);
+        }
+        ultimoEstadoCristian = new EstadoCristian(
+                horaLocal,
+                horaCoordinador,
+                horaAjustada,
+                rtt,
+                latencia,
+                configuracionCoordinacion.isAjustarRelojSistema(),
+                relojSistemaAjustado
+        );
 
         registrar("CRISTIAN", "Hora local=" + horaLocal
                 + ", hora coordinador=" + horaCoordinador
                 + ", latencia estimada=" + latencia + " ms"
-                + ", hora ajustada=" + horaAjustada);
+                + ", hora ajustada=" + horaAjustada
+                + ", ajuste sistema=" + relojSistemaAjustado);
+    }
+
+    private void procesarMutexRequest(MensajeTcp mensaje) {
+        if (!esCoordinadorLocal()) {
+            registrar("EXCLUSION", "MUTEX_REQUEST recibido en nodo no coordinador. Origen: nodo " + mensaje.getIdNodoOrigen());
+            return;
+        }
+
+        registrar("EXCLUSION", "MUTEX_REQUEST recibido desde nodo " + mensaje.getIdNodoOrigen());
+        procesarSolicitudMutexLocal(mensaje.getIdNodoOrigen());
+    }
+
+    private void procesarMutexGrant(MensajeTcp mensaje) {
+        solicitudExclusionPendiente = false;
+        accesoExclusionConcedido = true;
+        registrar("EXCLUSION", "MUTEX_GRANT recibido desde coordinador nodo " + mensaje.getIdNodoOrigen()
+                + ". Nodo entra a seccion critica: " + RECURSO_CRITICO);
+    }
+
+    private void procesarMutexRelease(MensajeTcp mensaje) {
+        if (!esCoordinadorLocal()) {
+            registrar("EXCLUSION", "MUTEX_RELEASE recibido en nodo no coordinador. Origen: nodo " + mensaje.getIdNodoOrigen());
+            return;
+        }
+
+        liberarMutexDesdeNodo(mensaje.getIdNodoOrigen());
+    }
+
+    private void procesarSolicitudMutexLocal(int nodoId) {
+        GestorConcurrencia.ResultadoSolicitud resultado = gestorConcurrencia.solicitarAcceso(nodoId);
+        if (resultado.concedido()) {
+            otorgarAccesoMutex(nodoId);
+            return;
+        }
+
+        registrar("EXCLUSION", "Nodo " + nodoId + " agregado a cola FIFO. Cola actual: " + resultado.colaEspera());
+    }
+
+    private void liberarMutexDesdeNodo(int nodoId) {
+        GestorConcurrencia.ResultadoLiberacion resultado = gestorConcurrencia.liberarAcceso(nodoId);
+        if (nodoId == configuracionNodoLocal.getId()) {
+            accesoExclusionConcedido = false;
+            solicitudExclusionPendiente = false;
+        }
+
+        if (resultado.liberado()) {
+            registrar("EXCLUSION", "Nodo " + nodoId + " libera seccion critica. Cola FIFO: " + resultado.colaEspera());
+        } else {
+            registrar("EXCLUSION", "Nodo " + nodoId + " no tenia la seccion critica. Cola FIFO: " + resultado.colaEspera());
+        }
+
+        if (resultado.liberado() && resultado.siguienteNodo() != null) {
+            otorgarAccesoMutex(resultado.siguienteNodo());
+        }
+    }
+
+    private void otorgarAccesoMutex(int nodoId) {
+        if (nodoId == configuracionNodoLocal.getId()) {
+            solicitudExclusionPendiente = false;
+            accesoExclusionConcedido = true;
+            registrar("EXCLUSION", "Coordinador concede acceso local a seccion critica: " + RECURSO_CRITICO);
+            return;
+        }
+
+        NodoHospitalario destino = nodos.get(nodoId);
+        if (destino == null) {
+            return;
+        }
+
+        boolean enviado = enviarMensaje(destino, TipoMensaje.MUTEX_GRANT, RECURSO_CRITICO);
+        registrar("EXCLUSION", "Coordinador concede acceso a nodo " + nodoId + ". Enviado: " + enviado);
     }
 
     private void procesarDonorRequest(MensajeTcp mensaje) {
@@ -485,8 +739,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
                 configuracionNodoLocal.getId(),
                 destino.getId(),
                 contenido,
-                reloj.ahora(),
-                nodoLocal().incrementarLamport()
+                reloj.ahora()
         );
 
         boolean enviado = comunicacionTcp.enviar(mensaje, destino);
@@ -542,7 +795,51 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         destino.setEstado(fuente.getEstado());
         destino.setRol(fuente.getRol());
         destino.setUltimaSenal(fuente.getUltimaSenal());
-        destino.setRelojLogicoLamport(fuente.getRelojLogicoLamport());
+    }
+
+    private boolean solicitarSincronizacionCristian(String motivo) {
+        if (!estaOperativo()) {
+            return false;
+        }
+
+        if (esCoordinadorLocal()) {
+            Instant ahora = reloj.ahora();
+            ultimoEstadoCristian = new EstadoCristian(
+                    ahora,
+                    ahora,
+                    ahora,
+                    0,
+                    0,
+                    configuracionCoordinacion.isAjustarRelojSistema(),
+                    false
+            );
+            registrar("CRISTIAN", "Nodo coordinador usa su propio reloj como referencia. Motivo: " + motivo);
+            return true;
+        }
+
+        NodoHospitalario coordinador = nodos.get(idCoordinadorActual);
+        if (coordinador == null || !coordinador.esActivo()) {
+            return false;
+        }
+
+        String solicitudId = UUID.randomUUID().toString();
+        solicitudesCristian.put(solicitudId, System.currentTimeMillis());
+        boolean enviado = enviarMensaje(coordinador, TipoMensaje.SYNC_TIME_REQUEST, solicitudId);
+        if (enviado) {
+            registrar("CRISTIAN", "SYNC_TIME_REQUEST enviado al coordinador nodo " + coordinador.getId()
+                    + ". Motivo: " + motivo);
+        }
+        return enviado;
+    }
+
+    private boolean coincideCategoria(String categoriaEvento, String categoriaSolicitada) {
+        if (categoriaSolicitada.equals("RED")) {
+            return categoriaEvento.equalsIgnoreCase("TCP") || categoriaEvento.equalsIgnoreCase("HEARTBEAT");
+        }
+        if (categoriaSolicitada.equals("EXCLUSION")) {
+            return categoriaEvento.equalsIgnoreCase("EXCLUSION");
+        }
+        return categoriaEvento.equalsIgnoreCase(categoriaSolicitada);
     }
 
     private void agregarEventos(Map<String, EventoSistema> acumulador, List<EventoSistema> eventosNuevos) {

@@ -10,4 +10,10 @@ public interface PuertoControlRemotoNodos {
     boolean solicitarCaida(NodoHospitalario nodo);
 
     boolean solicitarRecuperacion(NodoHospitalario nodo);
+
+    boolean solicitarSincronizacionCristian(NodoHospitalario nodo);
+
+    boolean solicitarExclusion(NodoHospitalario nodo);
+
+    boolean liberarExclusion(NodoHospitalario nodo);
 }

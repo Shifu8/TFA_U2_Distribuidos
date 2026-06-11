@@ -1,75 +1,62 @@
 # Arquitectura
 
-## Arquitectura hexagonal
+El proyecto se organiza como una aplicacion distribuida por capas. Cada proceso Java representa un nodo hospitalario independiente y se comunica con los demas mediante sockets TCP.
 
-El proyecto usa arquitectura hexagonal en `hospital-service` para mantener la logica distribuida lejos de los detalles tecnicos.
+## Capas
 
-- Dominio: contiene modelos y contratos. No importa Spring Boot.
-- Aplicacion: ejecuta casos de uso como Bully, heartbeats, Cristian y compatibilidad de donantes.
-- Infraestructura: implementa puertos con TCP, Consul, memoria, JSON y llamadas HTTP remotas.
-- Presentacion: expone controladores REST para el frontend.
+- `dominio`: modelos, enumeraciones y contratos del sistema.
+- `aplicacion`: servicios de negocio distribuido y coordinacion.
+- `infraestructura`: adaptadores concretos para TCP, Consul, configuracion JSON, memoria y llamadas HTTP internas.
+- `presentacion`: controladores REST y DTOs usados por el frontend.
 
-Esta separacion permite cambiar un adaptador, por ejemplo TCP o persistencia, sin modificar el nucleo de coordinacion.
+Los controladores REST solo exponen operaciones. La logica de Bully, Cristian y exclusion mutua vive en la capa de aplicacion.
 
-## Flujo Frontend -> API Gateway -> Backend
+## Flujo General
 
-El frontend llama al API Gateway en `http://localhost:8080`. El gateway mantiene rutas `/api/**` y las envia a `lb://hospital-service`. El balanceo usa instancias registradas en Consul.
-
-El servicio hospitalario responde REST y tambien participa en la red distribuida por TCP.
+```text
+Frontend React
+  -> API Gateway Spring Cloud Gateway, puerto 8080
+  -> hospital-service, puertos HTTP 8081 a 8084
+  -> sockets TCP entre nodos, puertos 9001 a 9004
+  -> Consul, puerto 8500, solo descubrimiento
+```
 
 ## Consul
 
-Consul registra procesos y permite descubrir instancias disponibles. Cada nodo hospitalario usa:
-
-- Nombre de servicio: `hospital-service`
-- Instance ID: `hospital-service-{node.id}`
-- Health check: `/actuator/health`
-
-El API Gateway tambien se registra como `api-gateway`.
-
-Consul ayuda a saber que procesos existen, pero no elige coordinador. La eleccion se mantiene como responsabilidad del algoritmo Bully.
+Consul registra instancias activas y permite que el API Gateway descubra nodos. No participa en la coordinacion distribuida.
 
 ## Bully
 
-Bully usa el ID numerico de cada nodo. El nodo activo con ID mas alto gana.
-
-Cuando un seguidor no recibe heartbeat del coordinador durante el tiempo configurado, envia `ELECTION` a nodos con ID mayor. Si recibe `ANSWER`, espera a que un nodo superior publique `COORDINATOR`. Si no recibe respuesta, se declara coordinador y notifica a todos.
+Bully elige como coordinador al nodo activo con ID mas alto. Si el coordinador cae y deja de enviar heartbeats, los seguidores inician eleccion por mensajes TCP.
 
 ## Cristian
 
-Cristian sincroniza tiempo de forma aproximada. Un seguidor pregunta la hora al coordinador, mide el viaje de ida y vuelta, estima latencia como `RTT / 2` y ajusta la hora recibida.
+Los seguidores consultan la hora del coordinador por TCP, calculan RTT y muestran hora local, hora del coordinador y hora ajustada.
 
-El sistema registra:
+## Exclusion Mutua Por Servidor Central
 
-- Hora local antes de ajustar.
-- Hora recibida del coordinador.
-- Latencia estimada.
-- Hora ajustada.
+El coordinador mantiene una unica cola FIFO mediante `GestorConcurrencia`. Solo un nodo puede entrar a la seccion critica `directorio-donantes`. Al liberar, el coordinador concede acceso al siguiente nodo de la cola.
 
 ## Comunicacion TCP
 
-Cada nodo abre un `ServerSocket` en su puerto TCP. Los mensajes se serializan como JSON de una sola linea y se leen con `BufferedReader`.
+Los mensajes se serializan como JSON de una linea. Cada nodo tiene un `ServerSocket` y envia mensajes con un cliente TCP.
 
 Tipos principales:
 
-- `HEARTBEAT`: coordinador a seguidores.
-- `ELECTION`: solicitud de eleccion.
-- `ANSWER`: respuesta de un nodo con ID mayor.
-- `COORDINATOR`: anuncio del nuevo coordinador.
-- `SYNC_TIME_REQUEST` y `SYNC_TIME_RESPONSE`: algoritmo de Cristian.
-- `DONOR_REQUEST` y `DONOR_RESPONSE`: simulacion de consulta clinica.
+- `HEARTBEAT`
+- `ELECTION`
+- `ANSWER`
+- `COORDINATOR`
+- `SYNC_TIME_REQUEST`
+- `SYNC_TIME_RESPONSE`
+- `MUTEX_REQUEST`
+- `MUTEX_GRANT`
+- `MUTEX_RELEASE`
+- `DONOR_REQUEST`
+- `DONOR_RESPONSE`
 
-## Despliegue localhost
+## Despliegue LAN
 
-Usa el `nodes.json` incluido, con host `localhost`, y ejecuta 4 procesos en puertos HTTP 8081 a 8084 y TCP 9001 a 9004.
+En 4 PCs reales, cada PC ejecuta el mismo JAR con diferente ID. `nodes.json` contiene las IPs entregadas por el router.
 
-## Despliegue en 4 laptops
-
-Todas las laptops deben tener el mismo codigo y el mismo `nodes.json`, pero con IPs reales de la red local:
-
-- Nodo 1: `192.168.1.10:9001`
-- Nodo 2: `192.168.1.11:9002`
-- Nodo 3: `192.168.1.12:9003`
-- Nodo 4: `192.168.1.13:9004`
-
-Cada laptop ejecuta el mismo JAR con diferente `node.id`, `server.port`, `tcp.port` y `node.host`. Consul puede ejecutarse en una laptop accesible para todas, usando `spring.cloud.consul.host` con esa IP.
+La PC 1 levanta Consul, API Gateway, frontend y nodo 1. Las PCs 2, 3 y 4 levantan sus nodos respectivos.

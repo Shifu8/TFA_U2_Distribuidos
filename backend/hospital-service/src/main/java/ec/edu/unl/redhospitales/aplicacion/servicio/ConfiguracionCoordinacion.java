@@ -13,6 +13,7 @@ public class ConfiguracionCoordinacion {
     private long esperaRespuestaEleccionMs = 1800;
     private long sincronizacionCristianMs = 8000;
     private int maximoLogs = 300;
+    private boolean ajustarRelojSistema = false;
 
     public long getHeartbeatMs() {
         return heartbeatMs;
@@ -52,5 +53,13 @@ public class ConfiguracionCoordinacion {
 
     public void setMaximoLogs(int maximoLogs) {
         this.maximoLogs = maximoLogs;
+    }
+
+    public boolean isAjustarRelojSistema() {
+        return ajustarRelojSistema;
+    }
+
+    public void setAjustarRelojSistema(boolean ajustarRelojSistema) {
+        this.ajustarRelojSistema = ajustarRelojSistema;
     }
 }

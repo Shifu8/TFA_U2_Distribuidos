@@ -8,4 +8,8 @@ import java.time.Instant;
 public interface PuertoReloj {
 
     Instant ahora();
+
+    default boolean ajustarSistema(Instant nuevaHora) {
+        return false;
+    }
 }

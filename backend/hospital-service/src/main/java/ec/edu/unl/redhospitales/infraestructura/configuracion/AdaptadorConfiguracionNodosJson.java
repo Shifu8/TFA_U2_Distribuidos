@@ -3,7 +3,7 @@
  */
 package ec.edu.unl.redhospitales.infraestructura.configuracion;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import ec.edu.unl.redhospitales.aplicacion.servicio.ConfiguracionNodoLocal;
 import ec.edu.unl.redhospitales.aplicacion.servicio.ConfiguracionTcpLocal;
@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -43,10 +44,21 @@ public class AdaptadorConfiguracionNodosJson implements PuertoConfiguracionNodos
     public List<NodoHospitalario> cargarNodos() {
         String archivo = environment.getProperty("nodes.config-file", "nodes.json");
         try (InputStream entrada = abrirArchivo(archivo)) {
-            ArchivoNodos archivoNodos = objectMapper.readValue(entrada, ArchivoNodos.class);
-            List<NodoHospitalario> nodos = archivoNodos.nodos().stream()
-                    .map(dto -> new NodoHospitalario(dto.id(), dto.nombreHospital(), dto.host(), dto.tcpPort(), dto.httpPort()))
-                    .toList();
+            JsonNode raiz = objectMapper.readTree(entrada);
+            JsonNode nodosJson = raiz.isArray() ? raiz : raiz.path("nodos");
+            if (!nodosJson.isArray()) {
+                throw new IllegalStateException("nodes.json debe contener un arreglo o una propiedad 'nodos'");
+            }
+
+            List<NodoHospitalario> nodos = new ArrayList<>();
+            for (JsonNode nodoJson : nodosJson) {
+                int id = nodoJson.path("id").asInt();
+                String nombreHospital = texto(nodoJson, "nombreHospital", "Hospital Nodo " + id);
+                String host = texto(nodoJson, "host", "localhost");
+                int tcpPort = entero(nodoJson, "tcpPort", "port", 9000 + id);
+                int httpPort = entero(nodoJson, "httpPort", "apiPort", 8080 + id);
+                nodos.add(new NodoHospitalario(id, nombreHospital, host, tcpPort, httpPort));
+            }
             aplicarSobrescrituraLocal(nodos);
             return nodos;
         } catch (IOException excepcion) {
@@ -73,11 +85,15 @@ public class AdaptadorConfiguracionNodosJson implements PuertoConfiguracionNodos
         }
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ArchivoNodos(List<NodoJson> nodos) {
+    private String texto(JsonNode nodo, String campo, String defecto) {
+        JsonNode valor = nodo.get(campo);
+        return valor == null || valor.asText().isBlank() ? defecto : valor.asText();
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record NodoJson(int id, String nombreHospital, String host, int tcpPort, int httpPort) {
+    private int entero(JsonNode nodo, String campoPrincipal, String campoAlterno, int defecto) {
+        if (nodo.has(campoPrincipal)) {
+            return nodo.path(campoPrincipal).asInt(defecto);
+        }
+        return nodo.path(campoAlterno).asInt(defecto);
     }
 }

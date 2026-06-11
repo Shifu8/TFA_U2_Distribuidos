@@ -16,6 +16,7 @@ spring:
         fail-fast: false
         health-check-path: /actuator/health
         prefer-ip-address: true
+        ip-address: ${NODE_HOST:localhost}
 
 node:
   id: ${NODE_ID:1}
@@ -35,6 +36,7 @@ coordinacion:
   espera-respuesta-eleccion-ms: 1800
   sincronizacion-cristian-ms: 8000
   maximo-logs: 300
+  ajustar-reloj-sistema: ${AJUSTAR_RELOJ_SISTEMA:false}
 
 management:
   endpoints:

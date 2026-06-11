@@ -19,7 +19,6 @@ public class NodoHospitalario {
     private EstadoNodo estado;
     private RolNodo rol;
     private Instant ultimaSenal;
-    private long relojLogicoLamport;
 
     public NodoHospitalario() {
         this.estado = EstadoNodo.ACTIVO;
@@ -43,7 +42,6 @@ public class NodoHospitalario {
         copia.setEstado(estado);
         copia.setRol(rol);
         copia.setUltimaSenal(ultimaSenal);
-        copia.setRelojLogicoLamport(relojLogicoLamport);
         return copia;
     }
 
@@ -68,15 +66,6 @@ public class NodoHospitalario {
     public void actualizarSenal() {
         this.ultimaSenal = Instant.now();
         this.estado = EstadoNodo.ACTIVO;
-    }
-
-    public long incrementarLamport() {
-        relojLogicoLamport++;
-        return relojLogicoLamport;
-    }
-
-    public void observarLamport(long tiempoRemoto) {
-        relojLogicoLamport = Math.max(relojLogicoLamport, tiempoRemoto) + 1;
     }
 
     public int getId() {
@@ -141,14 +130,6 @@ public class NodoHospitalario {
 
     public void setUltimaSenal(Instant ultimaSenal) {
         this.ultimaSenal = ultimaSenal;
-    }
-
-    public long getRelojLogicoLamport() {
-        return relojLogicoLamport;
-    }
-
-    public void setRelojLogicoLamport(long relojLogicoLamport) {
-        this.relojLogicoLamport = relojLogicoLamport;
     }
 
     @Override

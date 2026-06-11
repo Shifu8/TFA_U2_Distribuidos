@@ -6,6 +6,7 @@ package ec.edu.unl.redhospitales.infraestructura.controlremoto;
 import ec.edu.unl.redhospitales.dominio.enumeracion.EstadoNodo;
 import ec.edu.unl.redhospitales.dominio.enumeracion.RolNodo;
 import ec.edu.unl.redhospitales.dominio.modelo.EventoSistema;
+import ec.edu.unl.redhospitales.dominio.modelo.EstadoExclusionMutua;
 import ec.edu.unl.redhospitales.dominio.modelo.NodoHospitalario;
 import ec.edu.unl.redhospitales.dominio.puerto.PuertoConsultaRemotaNodos;
 import org.slf4j.Logger;
@@ -58,6 +59,18 @@ public class AdaptadorHttpConsultaRemotaNodos implements PuertoConsultaRemotaNod
         }
     }
 
+    @Override
+    public Optional<EstadoExclusionMutua> consultarEstadoExclusionLocal(NodoHospitalario nodo) {
+        String url = url(nodo, "/api/exclusion/local");
+        try {
+            EstadoExclusionMutua estado = restTemplate.getForObject(url, EstadoExclusionMutua.class);
+            return Optional.ofNullable(estado);
+        } catch (RuntimeException excepcion) {
+            LOGGER.debug("No se pudo consultar exclusion mutua local en {}: {}", url, excepcion.getMessage());
+            return Optional.empty();
+        }
+    }
+
     private String url(NodoHospitalario nodo, String ruta) {
         return "http://" + nodo.getHost() + ":" + nodo.getHttpPort() + ruta;
     }
@@ -70,15 +83,13 @@ public class AdaptadorHttpConsultaRemotaNodos implements PuertoConsultaRemotaNod
             int httpPort,
             String estado,
             String rol,
-            Instant ultimaSenal,
-            long relojLogicoLamport
+            Instant ultimaSenal
     ) {
         NodoHospitalario aModelo() {
             NodoHospitalario nodo = new NodoHospitalario(id, nombreHospital, host, tcpPort, httpPort);
             nodo.setEstado(EstadoNodo.valueOf(estado));
             nodo.setRol(RolNodo.valueOf(rol));
             nodo.setUltimaSenal(ultimaSenal);
-            nodo.setRelojLogicoLamport(relojLogicoLamport);
             return nodo;
         }
     }

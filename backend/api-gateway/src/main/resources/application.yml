@@ -15,15 +15,18 @@ spring:
         register: true
         fail-fast: false
         health-check-path: /actuator/health
+        prefer-ip-address: true
+        ip-address: ${GATEWAY_HOST:localhost}
     gateway:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
       globalcors:
         cors-configurations:
           "[/**]":
-            allowed-origins:
+            allowed-origin-patterns:
               - "http://localhost:5173"
               - "http://127.0.0.1:5173"
+              - "http://*:5173"
             allowed-methods:
               - GET
               - POST
@@ -57,6 +60,18 @@ spring:
           uri: lb://hospital-service
           predicates:
             - Path=/api/donors/**
+        - id: sincronizacion
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/synchronization/**,/api/sincronizacion/**
+        - id: exclusion
+          uri: lb://hospital-service
+          predicates:
+            - Path=/api/exclusion/**
+        - id: academicos
+          uri: lb://hospital-service
+          predicates:
+            - Path=/estado,/nodos,/coordinador,/logs,/logs/**,/eleccion/**,/sincronizacion/**,/exclusion/**,/solicitar_organo,/api/estado,/api/status,/api/solicitar_organo
 
 management:
   endpoints:

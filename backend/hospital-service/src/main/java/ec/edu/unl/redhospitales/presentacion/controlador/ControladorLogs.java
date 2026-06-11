@@ -8,13 +8,14 @@ import ec.edu.unl.redhospitales.presentacion.dto.EventoSistemaDto;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 @CrossOrigin
 @RestController
-@RequestMapping("/api/logs")
+@RequestMapping({"/api/logs", "/logs"})
 public class ControladorLogs {
 
     private final ServicioRedHospitalaria servicioRedHospitalaria;
@@ -24,8 +25,8 @@ public class ControladorLogs {
     }
 
     @GetMapping
-    public List<EventoSistemaDto> listar() {
-        return servicioRedHospitalaria.listarEventos().stream()
+    public List<EventoSistemaDto> listar(@RequestParam(required = false) String algoritmo) {
+        return servicioRedHospitalaria.listarEventos(algoritmo).stream()
                 .map(EventoSistemaDto::desde)
                 .toList();
     }

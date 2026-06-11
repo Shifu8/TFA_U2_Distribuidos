@@ -7,6 +7,8 @@ import {
   Clock,
   HeartPulse,
   Hospital,
+  ListOrdered,
+  Lock,
   Network,
   Play,
   Power,
@@ -17,15 +19,29 @@ import {
   Server,
   ShieldCheck,
   Stethoscope,
+  Unlock,
   Wifi,
 } from 'lucide-react';
 import heroDoctor from './assets/doctor-network-hero.png';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8080`;
 const tiposSangre = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
 
 async function fetchJson(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function fetchJsonUrl(url, options = {}) {
+  const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -51,11 +67,15 @@ function App() {
   const [coordinador, setCoordinador] = useState(null);
   const [logs, setLogs] = useState([]);
   const [instanciasConsul, setInstanciasConsul] = useState([]);
+  const [estadoSistema, setEstadoSistema] = useState(null);
+  const [estadoCristian, setEstadoCristian] = useState(null);
+  const [estadoExclusion, setEstadoExclusion] = useState(null);
   const [error, setError] = useState('');
   const [mensajeAccion, setMensajeAccion] = useState('');
   const [cargando, setCargando] = useState(false);
   const [accion, setAccion] = useState('');
   const [categoriaLog, setCategoriaLog] = useState('TODOS');
+  const [nodoAlgoritmo, setNodoAlgoritmo] = useState(1);
   const [resultadoDonante, setResultadoDonante] = useState(null);
   const [donante, setDonante] = useState({
     nombreDonante: 'Donante Loja',
@@ -76,20 +96,40 @@ function App() {
   const logsFiltrados = categoriaLog === 'TODOS'
     ? logs
     : logs.filter((log) => log.categoria === categoriaLog);
+  const nodoLocal = estadoSistema?.nodoLocal;
+  const colaExclusion = estadoExclusion?.colaEspera || [];
+  const nodoObjetivo = nodos.find((nodo) => nodo.id === Number(nodoAlgoritmo));
 
   async function cargarDatos(silencioso = false) {
     if (!silencioso) setCargando(true);
     try {
-      const [nodosData, coordinadorData, logsData, consulData] = await Promise.all([
+      const [nodosData, coordinadorData, logsData, consulData, estadoData] = await Promise.all([
         fetchJson('/api/nodes'),
         fetchJson('/api/nodes/coordinator'),
         fetchJson('/api/logs'),
         fetchJson('/api/nodes/consul'),
+        fetchJson('/api/estado'),
       ]);
       setNodos(nodosData);
       setCoordinador(coordinadorData);
       setLogs(logsData);
       setInstanciasConsul(consulData);
+      setEstadoSistema(estadoData);
+      setEstadoExclusion(estadoData.exclusion);
+      const objetivo = nodosData.find((nodo) => nodo.id === Number(nodoAlgoritmo)) || nodosData[0];
+      if (!nodosData.some((nodo) => nodo.id === Number(nodoAlgoritmo)) && objetivo) {
+        setNodoAlgoritmo(nodosData[0].id);
+      }
+      if (objetivo) {
+        try {
+          const cristianDirecto = await fetchJsonUrl(`http://${objetivo.host}:${objetivo.httpPort}/api/synchronization/cristian`);
+          setEstadoCristian(cristianDirecto);
+        } catch (exception) {
+          setEstadoCristian(estadoData.cristian);
+        }
+      } else {
+        setEstadoCristian(estadoData.cristian);
+      }
       setError('');
     } catch (exception) {
       setError(`No se pudo conectar con el API Gateway en ${API_BASE_URL}`);
@@ -142,6 +182,21 @@ function App() {
   const recuperarNodoPorId = (id) =>
     ejecutarAccion(`recuperacion-${id}`, () =>
       fetchJson(`/api/simulation/recover/${id}`, { method: 'POST' })
+    );
+
+  const ejecutarCristian = () =>
+    ejecutarAccion('cristian', () =>
+      fetchJson(`/api/synchronization/cristian/${nodoAlgoritmo}`, { method: 'POST' })
+    );
+
+  const solicitarExclusion = () =>
+    ejecutarAccion('exclusion-solicitar', () =>
+      fetchJson(`/api/exclusion/request/${nodoAlgoritmo}`, { method: 'POST' })
+    );
+
+  const liberarExclusion = () =>
+    ejecutarAccion('exclusion-liberar', () =>
+      fetchJson(`/api/exclusion/release/${nodoAlgoritmo}`, { method: 'POST' })
     );
 
   const enviarConsultaDonante = (event) => {
@@ -228,6 +283,84 @@ function App() {
           <Power size={18} />
           Fallar coordinador
         </button>
+      </section>
+
+      <section className="panel algoritmos-panel">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Control de concurrencia</p>
+            <h2>Algoritmos Distribuidos</h2>
+          </div>
+          <Network size={20} />
+        </div>
+
+        <div className="algoritmos-grid">
+          <div className="algoritmo-bloque">
+            <span className="algoritmo-label">Bully / Grandulon</span>
+            <strong>{nodoLocal?.rol === 'COORDINADOR' ? 'Lider' : 'Seguidor'}</strong>
+            <small>Nodo local {nodoLocal?.id || '-'}</small>
+            <small>Coordinador actual: {nodoCoordinador ? `Nodo ${nodoCoordinador.id}` : 'pendiente'}</small>
+          </div>
+
+          <div className="algoritmo-bloque">
+            <span className="algoritmo-label">Cristian</span>
+            <strong>RTT {estadoCristian?.rttMs ?? 0} ms</strong>
+            <small>Local: {formatoHora(estadoCristian?.horaLocal)}</small>
+            <small>Coordinador: {formatoHora(estadoCristian?.horaCoordinador)}</small>
+            <small>Ajustada: {formatoHora(estadoCristian?.horaAjustada)}</small>
+            <small>
+              Sistema: {estadoCristian?.ajusteSistemaHabilitado
+                ? (estadoCristian?.relojSistemaAjustado ? 'ajustado' : 'pendiente/error sudo')
+                : 'solo calculado'}
+            </small>
+          </div>
+
+          <div className="algoritmo-bloque">
+            <span className="algoritmo-label">Servidor Central</span>
+            <strong>{estadoExclusion?.estadoLocal || 'LIBRE'}</strong>
+            <small>Recurso: {estadoExclusion?.recurso || 'directorio-donantes'}</small>
+            <small>
+              Seccion critica: {estadoExclusion?.nodoEnSeccionCritica
+                ? `Nodo ${estadoExclusion.nodoEnSeccionCritica}`
+                : 'libre'}
+            </small>
+            <small>Cola FIFO: {colaExclusion.length ? colaExclusion.map((id) => `Nodo ${id}`).join(', ') : 'vacia'}</small>
+          </div>
+
+          <div className="algoritmo-controles">
+            <label>
+              Nodo de prueba
+              <select
+                value={nodoAlgoritmo}
+                onChange={(event) => setNodoAlgoritmo(Number(event.target.value))}
+              >
+                {nodos.map((nodo) => (
+                  <option key={nodo.id} value={nodo.id}>
+                    Nodo {nodo.id} - {nodo.nombreHospital}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="algoritmo-botones">
+              <button onClick={ejecutarCristian} disabled={Boolean(accion) || !nodoObjetivo} className="icon-button secondary">
+                <Clock size={18} />
+                Sincronizar
+              </button>
+              <button onClick={solicitarExclusion} disabled={Boolean(accion) || !nodoObjetivo} className="icon-button primary">
+                <Lock size={18} />
+                Solicitar
+              </button>
+              <button onClick={liberarExclusion} disabled={Boolean(accion) || !nodoObjetivo} className="icon-button danger">
+                <Unlock size={18} />
+                Liberar
+              </button>
+            </div>
+            <div className="cola-fifo">
+              <ListOrdered size={17} />
+              <span>{colaExclusion.length ? colaExclusion.join(' -> ') : 'Sin espera'}</span>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="nodos-grid">
@@ -346,7 +479,7 @@ function App() {
 
             <button className="icon-button primary full" disabled={accion === 'donante'}>
               <Send size={18} />
-              Consultar
+              Solicitar organo
             </button>
           </form>
 

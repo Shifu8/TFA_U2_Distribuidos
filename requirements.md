@@ -87,7 +87,7 @@ Los nodos intercambian `MensajeTcp` serializados como JSON en una linea. Tipos s
 - `DONOR_REQUEST`
 - `DONOR_RESPONSE`
 
-Cada mensaje incluye origen, destino, contenido, marca de tiempo y tiempo Lamport.
+Cada mensaje incluye origen, destino, contenido y marca de tiempo. La exclusion mutua se implementa con Servidor Central y cola FIFO.
 
 ## Comandos para ejecutar
 

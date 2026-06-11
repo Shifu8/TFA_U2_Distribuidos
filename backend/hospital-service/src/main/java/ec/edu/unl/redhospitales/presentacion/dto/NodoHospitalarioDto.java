@@ -15,8 +15,7 @@ public record NodoHospitalarioDto(
         int httpPort,
         String estado,
         String rol,
-        Instant ultimaSenal,
-        long relojLogicoLamport
+        Instant ultimaSenal
 ) {
 
     public static NodoHospitalarioDto desde(NodoHospitalario nodo) {
@@ -28,8 +27,7 @@ public record NodoHospitalarioDto(
                 nodo.getHttpPort(),
                 nodo.getEstado().name(),
                 nodo.getRol().name(),
-                nodo.getUltimaSenal(),
-                nodo.getRelojLogicoLamport()
+                nodo.getUltimaSenal()
         );
     }
 }

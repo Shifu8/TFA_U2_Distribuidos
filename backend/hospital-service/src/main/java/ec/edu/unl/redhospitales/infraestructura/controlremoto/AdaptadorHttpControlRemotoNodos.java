@@ -32,6 +32,21 @@ public class AdaptadorHttpControlRemotoNodos implements PuertoControlRemotoNodos
         return ejecutarPost(nodo, "/api/simulation/local/recover");
     }
 
+    @Override
+    public boolean solicitarSincronizacionCristian(NodoHospitalario nodo) {
+        return ejecutarPost(nodo, "/api/synchronization/cristian");
+    }
+
+    @Override
+    public boolean solicitarExclusion(NodoHospitalario nodo) {
+        return ejecutarPost(nodo, "/api/exclusion/request");
+    }
+
+    @Override
+    public boolean liberarExclusion(NodoHospitalario nodo) {
+        return ejecutarPost(nodo, "/api/exclusion/release");
+    }
+
     private boolean ejecutarPost(NodoHospitalario nodo, String ruta) {
         String url = "http://" + nodo.getHost() + ":" + nodo.getHttpPort() + ruta;
         try {

@@ -1,187 +1,102 @@
 # Red de Hospitales Distribuida
 
-Proyecto academico para simular una red distribuida de 4 hospitales con Java 21, Spring Boot 3, Spring Cloud Gateway, Consul, sockets TCP y React + Vite.
+Proyecto academico de Sistemas Distribuidos para ejecutar una red de 4 hospitales en computadoras reales conectadas al mismo router. Cada computadora representa un nodo independiente del sistema.
 
-El sistema ejecuta varios procesos del mismo servicio hospitalario. Cada proceso representa un nodo, intercambia mensajes TCP con los demas, detecta fallos del coordinador mediante heartbeats, elige un nuevo coordinador con Bully, sincroniza tiempo con Cristian y expone un API REST consumido por el frontend a traves del API Gateway.
+No se usa Docker, Docker Swarm ni Gunicorn. El backend esta hecho con Java 21 y Spring Boot, por eso cada nodo se ejecuta como un proceso Java independiente usando `java -jar`.
 
-## Tecnologias usadas
+## Objetivo
+
+El mismo backend debe poder copiarse a 4 PCs y ejecutarse cambiando solo:
+
+- El `nodeId` usado al iniciar.
+- Las IPs configuradas en `nodes.json`.
+
+La comunicacion distribuida entre nodos se hace por sockets TCP sobre la red local. Consul se usa solo para descubrimiento de servicios.
+
+## Tecnologias
 
 - Java 21
 - Spring Boot 3
 - Spring Cloud Gateway
 - Spring Cloud Consul Discovery
-- TCP Sockets en Java
+- Sockets TCP
 - Maven
-- SLF4J
 - React + Vite
-- Framer Motion
-- Lucide React
-- PostgreSQL opcional, no requerido por esta version
+- Bash scripts
 
-No se usa Docker ni Docker Compose.
+## Arquitectura Por Capas
 
-## Arquitectura general
+El backend esta separado por responsabilidades:
 
-```text
-Frontend React
-  -> API Gateway Spring Cloud Gateway, puerto 8080
-  -> hospital-service, puertos HTTP 8081 a 8084
-  -> Consul, puerto 8500, registro y descubrimiento
-  -> Sockets TCP, puertos 9001 a 9004
-```
+- `dominio`: modelos, enumeraciones y contratos.
+- `aplicacion/servicio`: logica de coordinacion y algoritmos distribuidos.
+- `infraestructura/tcp`: cliente y servidor TCP.
+- `infraestructura/consul`: descubrimiento de servicios.
+- `infraestructura/configuracion`: carga de `nodes.json`.
+- `infraestructura/controlremoto`: llamadas HTTP internas entre nodos.
+- `presentacion/controlador`: endpoints REST.
+- `presentacion/dto`: respuestas para frontend.
 
-El backend principal usa arquitectura hexagonal:
+Los controladores no implementan los algoritmos; solo llaman al servicio de aplicacion.
 
-- `dominio`: modelos, enumeraciones y puertos sin dependencias de Spring.
-- `aplicacion`: casos de uso y coordinacion de reglas.
-- `infraestructura`: adaptadores TCP, Consul, memoria y control remoto.
-- `presentacion`: controladores REST y DTOs.
+## Algoritmos Implementados
 
-## Instalar y ejecutar Consul manualmente
+### Bully / Grandulon
 
-### Ubuntu
+El nodo activo con ID mas alto debe ser coordinador. El coordinador envia heartbeats. Si un seguidor deja de recibir heartbeat, inicia eleccion:
 
-```bash
-wget -O consul.zip https://releases.hashicorp.com/consul/1.19.2/consul_1.19.2_linux_amd64.zip
-unzip consul.zip
-sudo mv consul /usr/local/bin/
-consul --version
-consul agent -dev -client=0.0.0.0
-```
+1. Envia `ELECTION` a nodos con ID mayor.
+2. Si recibe `ANSWER`, espera `COORDINATOR`.
+3. Si no recibe respuesta, se declara coordinador.
+4. Notifica a los demas con `COORDINATOR`.
 
-### Windows
+### Cristian
 
-1. Descarga Consul desde `https://developer.hashicorp.com/consul/install`.
-2. Agrega `consul.exe` al `PATH`.
-3. Ejecuta:
+Los seguidores sincronizan su reloj con el coordinador:
 
-```powershell
-consul agent -dev -client=0.0.0.0
-```
+1. El seguidor envia `SYNC_TIME_REQUEST`.
+2. El coordinador responde con su hora.
+3. El seguidor calcula RTT.
+4. Estima latencia como `RTT / 2`.
+5. Muestra hora local, hora del coordinador y hora ajustada.
 
-La consola web queda disponible en `http://localhost:8500`.
+### Exclusion Mutua Por Servidor Central
 
-Consul no reemplaza a Bully. Consul registra y descubre servicios activos; Bully decide que nodo hospitalario es coordinador.
+El coordinador actua como servidor central de concurrencia. Se usa una cola FIFO:
 
-## Compilar backend
+1. Un nodo envia `MUTEX_REQUEST`.
+2. El coordinador concede acceso con `MUTEX_GRANT` si el recurso esta libre.
+3. Si esta ocupado, el nodo queda en cola FIFO.
+4. El nodo libera con `MUTEX_RELEASE`.
+5. El coordinador concede acceso al siguiente nodo de la cola.
 
-Desde la raiz:
+El recurso critico simulado es `directorio-donantes`.
 
-```bash
-mvn clean package
-```
+## Patron Singleton
 
-## Ejecutar los 4 nodos en una maquina
+Se aplica Singleton en:
 
-Abre una terminal por nodo desde la raiz del proyecto:
+- `ConfiguracionNodoLocal`: mantiene la configuracion unica del nodo local: ID, host y datos base de ejecucion.
+- `GestorConcurrencia`: mantiene una unica cola FIFO y un unico nodo propietario de la seccion critica dentro del coordinador.
 
-```bash
-java -jar backend/hospital-service/target/hospital-service.jar --node.id=1 --server.port=8081 --tcp.port=9001
-java -jar backend/hospital-service/target/hospital-service.jar --node.id=2 --server.port=8082 --tcp.port=9002
-java -jar backend/hospital-service/target/hospital-service.jar --node.id=3 --server.port=8083 --tcp.port=9003
-java -jar backend/hospital-service/target/hospital-service.jar --node.id=4 --server.port=8084 --tcp.port=9004
-```
+Esto evita configuraciones duplicadas y multiples colas dentro del mismo nodo.
 
-El nodo activo con ID mas alto debe quedar como coordinador. Con los 4 nodos activos, el coordinador esperado es el nodo 4.
+## Consul
 
-## Ejecutar el API Gateway
+Consul registra servicios activos y permite descubrir instancias. No decide coordinador ni ejecuta algoritmos.
 
-En otra terminal:
+En este sistema:
 
-```bash
-java -jar backend/api-gateway/target/api-gateway.jar --server.port=8080
-```
+- Consul = descubrimiento de servicios.
+- Bully = eleccion de coordinador.
+- Cristian = sincronizacion de relojes.
+- Servidor Central = exclusion mutua.
 
-Rutas minimas expuestas por el gateway:
+## Configuracion De Nodos
 
-- `GET http://localhost:8080/api/hospitals`
-- `GET http://localhost:8080/api/nodes`
-- `GET http://localhost:8080/api/nodes/coordinator`
-- `GET http://localhost:8080/api/logs`
-- `POST http://localhost:8080/api/election/start`
-- `POST http://localhost:8080/api/simulation/fail/{nodeId}`
-- `POST http://localhost:8080/api/simulation/recover/{nodeId}`
-- `POST http://localhost:8080/api/donors/compatibility`
+Editar `nodes.json` antes de la defensa con las IP reales entregadas por el router.
 
-## Ejecutar frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Abre `http://localhost:5173`. El frontend consume el gateway en `http://localhost:8080`. Para cambiarlo, crea `frontend/.env`:
-
-```env
-VITE_API_BASE_URL=http://localhost:8080
-```
-
-## Probar caida del coordinador
-
-Con los 4 nodos activos, el coordinador inicial es el nodo 4. Puedes simular su caida desde el gateway:
-
-```bash
-curl -X POST http://localhost:8080/api/simulation/fail/4
-```
-
-Tambien puedes llamar directamente al nodo:
-
-```bash
-curl -X POST http://localhost:8084/api/simulation/fail/4
-```
-
-El nodo 4 deja de enviar heartbeats y deja de responder mensajes distribuidos. Tras mas de 5 segundos sin heartbeat, los seguidores inician eleccion Bully.
-
-## Verificar eleccion Bully
-
-Consulta el coordinador:
-
-```bash
-curl http://localhost:8080/api/nodes/coordinator
-```
-
-Despues de fallar el nodo 4, el coordinador esperado es el nodo 3. Los logs deben mostrar mensajes `ELECTION`, `ANSWER` y `COORDINATOR`.
-
-Tambien puedes iniciar una eleccion manual:
-
-```bash
-curl -X POST http://localhost:8080/api/election/start
-```
-
-## Verificar heartbeats
-
-Consulta logs:
-
-```bash
-curl http://localhost:8080/api/logs
-```
-
-El coordinador registra envio de `HEARTBEAT` cada 2 segundos. Los seguidores registran la recepcion y actualizan `ultimaSenal`.
-
-## Verificar sincronizacion Cristian
-
-Los seguidores solicitan tiempo al coordinador periodicamente mediante `SYNC_TIME_REQUEST`. El coordinador responde `SYNC_TIME_RESPONSE`. En los logs se registran hora local, hora recibida, latencia estimada y hora ajustada.
-
-## Verificar Consul
-
-Abre:
-
-```text
-http://localhost:8500/ui
-```
-
-Debe aparecer el servicio `hospital-service` con varias instancias y el servicio `api-gateway`.
-
-Desde consola:
-
-```bash
-curl http://localhost:8500/v1/catalog/service/hospital-service
-```
-
-## Usar 4 laptops en el mismo router
-
-Edita `nodes.json` en todas las laptops y cambia `localhost` por las IP reales:
+Formato actual soportado:
 
 ```json
 {
@@ -194,10 +109,152 @@ Edita `nodes.json` en todas las laptops y cambia `localhost` por las IP reales:
 }
 ```
 
-Cada laptop ejecuta el mismo JAR, con parametros diferentes:
+Tambien se soporta el formato simple:
 
-```bash
-java -jar backend/hospital-service/target/hospital-service.jar --node.id=1 --server.port=8081 --tcp.port=9001 --node.host=192.168.1.10 --spring.cloud.consul.host=192.168.1.10
+```json
+[
+  { "id": 1, "host": "192.168.1.10", "port": 9001, "apiPort": 8081 }
+]
 ```
 
-Cambia `node.id`, `server.port`, `tcp.port`, `node.host` y `spring.cloud.consul.host` segun corresponda. Asegurate de abrir los puertos HTTP, TCP y el puerto 8500 de Consul en el firewall.
+## Ejecucion En 4 PCs Con Router
+
+Todas las PCs deben tener el proyecto copiado y Java 21 instalado. La PC 1 es la principal porque levanta Consul, API Gateway y frontend.
+
+### PC 1
+
+```bash
+./scripts/iniciar-nodo.sh 1
+```
+
+Levanta:
+
+- Consul
+- API Gateway
+- Frontend
+- Nodo 1
+
+### PC 2
+
+```bash
+./scripts/iniciar-nodo.sh 2
+```
+
+### PC 3
+
+```bash
+./scripts/iniciar-nodo.sh 3
+```
+
+### PC 4
+
+```bash
+./scripts/iniciar-nodo.sh 4
+```
+
+Si el sistema no permite ejecutar directo el `.sh`, usar:
+
+```bash
+bash scripts/iniciar-nodo.sh 1
+```
+
+## URLs De La Defensa
+
+Si la PC principal tiene IP `192.168.1.10`:
+
+- Dashboard: `http://192.168.1.10:5173`
+- API Gateway: `http://192.168.1.10:8080`
+- Consul UI: `http://192.168.1.10:8500`
+
+El profesor puede abrir el dashboard desde cualquier computadora conectada al mismo router.
+
+En la defensa no es obligatorio que el profesor abra nada. Ustedes pueden proyectar la PC observadora o la PC principal y mostrar el dashboard desde ahi.
+
+## PC Observadora
+
+Si una computadora no sera nodo, puede usarse solo para ver la aplicacion. Debe estar conectada al mismo router y abrir:
+
+```text
+http://IP_DE_PC_1:5173
+```
+
+Esa PC no ejecuta `iniciar-nodo.sh`; solo abre el navegador.
+
+## Cristian Cambiando La Hora Del Sistema En Ubuntu
+
+Por defecto, Cristian calcula y muestra la hora ajustada sin modificar el reloj del sistema operativo. Para que realmente cambie la hora de Ubuntu, iniciar cada nodo con:
+
+```bash
+AJUSTAR_RELOJ_SISTEMA=true bash scripts/iniciar-nodo.sh 2
+```
+
+El script pedira permisos `sudo` al inicio porque cambiar la hora del sistema requiere privilegios. Internamente el nodo usa comandos de Ubuntu como `timedatectl` y `date`.
+
+Ejemplo para las 4 PCs:
+
+```bash
+AJUSTAR_RELOJ_SISTEMA=true bash scripts/iniciar-nodo.sh 1
+AJUSTAR_RELOJ_SISTEMA=true bash scripts/iniciar-nodo.sh 2
+AJUSTAR_RELOJ_SISTEMA=true bash scripts/iniciar-nodo.sh 3
+AJUSTAR_RELOJ_SISTEMA=true bash scripts/iniciar-nodo.sh 4
+```
+
+Para evitar que Ubuntu vuelva a corregir la hora automaticamente, el nodo intenta desactivar NTP con `timedatectl set-ntp false`.
+
+## Prueba Local En Una Sola PC
+
+Con `nodes.json` usando `localhost`, se puede levantar todo:
+
+```bash
+./scripts/iniciar-red.sh
+```
+
+Para detener:
+
+```bash
+./scripts/detener-red.sh
+```
+
+Los logs generados por scripts se guardan en `logs/`.
+
+## Endpoints Minimos
+
+Endpoints academicos:
+
+- `GET /estado`
+- `GET /nodos`
+- `GET /coordinador`
+- `POST /eleccion/iniciar`
+- `POST /sincronizacion/cristian`
+- `POST /exclusion/solicitar`
+- `POST /exclusion/liberar`
+- `POST /solicitar_organo`
+- `GET /logs?algoritmo=bully`
+- `GET /logs?algoritmo=cristian`
+- `GET /logs?algoritmo=exclusion`
+- `GET /logs?algoritmo=red`
+
+Endpoints usados por el dashboard:
+
+- `GET /api/estado`
+- `GET /api/nodes`
+- `GET /api/nodes/coordinator`
+- `POST /api/election/start`
+- `POST /api/synchronization/cristian/{nodeId}`
+- `POST /api/exclusion/request/{nodeId}`
+- `POST /api/exclusion/release/{nodeId}`
+- `GET /api/logs`
+
+## Pruebas Para La Defensa
+
+1. Levantar los 4 nodos en 4 PCs.
+2. Abrir Consul y mostrar los servicios registrados.
+3. Abrir el dashboard desde la IP de la PC 1.
+4. Verificar que el coordinador inicial sea el nodo activo con ID mas alto.
+5. Fallar el coordinador desde el dashboard.
+6. Verificar nueva eleccion Bully.
+7. Ejecutar sincronizacion Cristian y mostrar RTT.
+8. Solicitar seccion critica desde dos nodos distintos.
+9. Mostrar la cola FIFO.
+10. Liberar la seccion critica y ver pasar el permiso al siguiente nodo.
+11. Filtrar logs por `BULLY`, `CRISTIAN`, `EXCLUSION` y `RED`.

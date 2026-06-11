@@ -14,18 +14,16 @@ public class MensajeTcp {
     private int idNodoDestino;
     private String contenido;
     private Instant marcaTiempo;
-    private long tiempoLamport;
 
     public MensajeTcp() {
     }
 
-    public MensajeTcp(TipoMensaje tipo, int idNodoOrigen, int idNodoDestino, String contenido, Instant marcaTiempo, long tiempoLamport) {
+    public MensajeTcp(TipoMensaje tipo, int idNodoOrigen, int idNodoDestino, String contenido, Instant marcaTiempo) {
         this.tipo = tipo;
         this.idNodoOrigen = idNodoOrigen;
         this.idNodoDestino = idNodoDestino;
         this.contenido = contenido;
         this.marcaTiempo = marcaTiempo;
-        this.tiempoLamport = tiempoLamport;
     }
 
     public TipoMensaje getTipo() {
@@ -66,13 +64,5 @@ public class MensajeTcp {
 
     public void setMarcaTiempo(Instant marcaTiempo) {
         this.marcaTiempo = marcaTiempo;
-    }
-
-    public long getTiempoLamport() {
-        return tiempoLamport;
-    }
-
-    public void setTiempoLamport(long tiempoLamport) {
-        this.tiempoLamport = tiempoLamport;
     }
 }
