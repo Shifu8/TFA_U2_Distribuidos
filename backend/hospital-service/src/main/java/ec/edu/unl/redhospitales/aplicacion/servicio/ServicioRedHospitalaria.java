@@ -145,6 +145,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         agregarEventos(eventos, registroEventos.listar());
         nodos.values().stream()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
                 .forEach(nodo -> agregarEventos(eventos, consultaRemotaNodos.consultarEventosLocales(nodo)));
 
         return eventos.values().stream()
@@ -195,6 +196,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
 
         NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+            return "No se puede solicitar sincronizacion Cristian en nodo " + nodeId + " porque está INACTIVO";
+        }
         boolean enviada = controlRemotoNodos.solicitarSincronizacionCristian(nodo);
         registrar("CRISTIAN", "Solicitud remota de sincronizacion enviada al nodo " + nodeId + ". Resultado: " + enviada);
         return enviada
@@ -248,6 +252,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
 
         NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+            return "No se puede solicitar seccion critica en nodo " + nodeId + " porque está INACTIVO";
+        }
         boolean enviada = controlRemotoNodos.solicitarExclusion(nodo);
         registrar("EXCLUSION", "Solicitud remota de exclusion enviada al nodo " + nodeId + ". Resultado: " + enviada);
         return enviada
@@ -287,6 +294,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
 
         NodoHospitalario nodo = obtenerNodoObligatorio(nodeId);
+        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+            return "No se puede liberar seccion critica en nodo " + nodeId + " porque está INACTIVO";
+        }
         boolean enviada = controlRemotoNodos.liberarExclusion(nodo);
         registrar("EXCLUSION", "Solicitud remota de liberacion enviada al nodo " + nodeId + ". Resultado: " + enviada);
         return enviada
@@ -301,6 +311,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
         return obtenerCoordinador()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
                 .flatMap(consultaRemotaNodos::consultarEstadoExclusionLocal)
                 .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
     }
@@ -490,7 +501,50 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
     }
 
+    @Scheduled(fixedDelay = 2000, initialDelay = 3000)
+    public void sincronizarEstadoNodosConConsul() {
+        if (!estaOperativo()) {
+            return;
+        }
 
+        try {
+            Set<Integer> nodosActivosConsul = descubrimientoServicios.obtenerNodosActivosEnConsul();
+            if (nodosActivosConsul.isEmpty()) {
+                return;
+            }
+
+            boolean coordinadorSeCayo = false;
+
+            for (NodoHospitalario nodo : nodos.values()) {
+                if (nodo.getId() == configuracionNodoLocal.getId()) {
+                    continue;
+                }
+
+                boolean activoEnConsul = nodosActivosConsul.contains(nodo.getId());
+                if (activoEnConsul) {
+                    if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+                        nodo.marcarActivo();
+                        registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como ACTIVO a través de Consul.");
+                    }
+                } else {
+                    if (nodo.getEstado() != EstadoNodo.INACTIVO) {
+                        nodo.marcarInactivo();
+                        registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como INACTIVO a través de Consul.");
+                        if (nodo.getId() == idCoordinadorActual) {
+                            coordinadorSeCayo = true;
+                        }
+                    }
+                }
+            }
+
+            if (coordinadorSeCayo) {
+                registrar("BULLY", "El coordinador (nodo " + idCoordinadorActual + ") se ha caído según Consul. Iniciando elección...");
+                iniciarEleccion("coordinador caido detectado por Consul");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error al sincronizar estado de nodos con Consul", e);
+        }
+    }
 
     private void iniciarEleccion(String motivo) {
         if (!estaOperativo()) {
@@ -755,6 +809,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         if (destino == null || destino.getId() == configuracionNodoLocal.getId()) {
             return false;
         }
+        if (destino.getEstado() == EstadoNodo.INACTIVO) {
+            return false;
+        }
 
         MensajeTcp mensaje = new MensajeTcp(
                 tipo,
@@ -792,6 +849,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
     private NodoHospitalario consultarVistaActual(NodoHospitalario nodo) {
         if (nodo.getId() == configuracionNodoLocal.getId()) {
+            return nodo.copiar();
+        }
+        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
             return nodo.copiar();
         }
 
