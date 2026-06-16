@@ -21,6 +21,7 @@ bash "$ROOT_DIR/scripts/iniciar-nodo.sh" 3
 sleep 1
 bash "$ROOT_DIR/scripts/iniciar-nodo.sh" 4
 
+
 echo ""
 echo "Red local iniciada."
 echo "Dashboard: http://localhost:5173"

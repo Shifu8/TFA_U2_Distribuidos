@@ -86,18 +86,7 @@ h3 {
   box-shadow: 0 30px 70px rgba(18, 48, 71, 0.18);
 }
 
-.landing-card::before {
-  content: "RED MEDICA";
-  position: absolute;
-  top: -24px;
-  left: 28px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: clamp(4.4rem, 12vw, 10rem);
-  font-weight: 950;
-  letter-spacing: -7px;
-  white-space: nowrap;
-  pointer-events: none;
-}
+
 
 .topbar {
   position: relative;
@@ -159,15 +148,20 @@ h3 {
 .hero-grid {
   position: relative;
   z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(340px, 0.85fr) minmax(210px, 0.45fr);
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  justify-content: center;
+  text-align: center;
   padding: 64px 44px 36px;
+  min-height: 400px;
 }
 
 .hero-copy {
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .hero-badge {
@@ -184,17 +178,17 @@ h3 {
 }
 
 .hero-copy h1 {
-  max-width: 540px;
+  max-width: 800px;
   margin-top: 18px;
   color: #ffffff;
-  font-size: clamp(3.3rem, 7.4vw, 6.7rem);
-  line-height: 0.82;
+  font-size: clamp(3.3rem, 7.4vw, 5.5rem);
+  line-height: 1.05;
   letter-spacing: -4px;
   text-shadow: 0 20px 44px rgba(21, 68, 98, 0.2);
 }
 
 .hero-copy p {
-  max-width: 470px;
+  max-width: 600px;
   margin-top: 22px;
   color: #31566f;
   font-size: 1.02rem;
@@ -206,33 +200,7 @@ h3 {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 28px;
-}
-
-.hero-media {
-  position: relative;
-  min-height: 430px;
-  display: flex;
-  align-items: flex-end;
   justify-content: center;
-}
-
-.hero-media::before {
-  content: "";
-  position: absolute;
-  width: 340px;
-  height: 340px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 0 0 28px rgba(210, 233, 247, 0.84);
-}
-
-.hero-media img {
-  position: relative;
-  z-index: 1;
-  width: min(100%, 410px);
-  max-height: 430px;
-  object-fit: contain;
-  filter: drop-shadow(0 24px 28px rgba(22, 73, 104, 0.22));
 }
 
 .float-card,
@@ -1100,4 +1068,32 @@ input:focus {
   .panel {
     min-height: auto;
   }
+}
+
+.tabs-log {
+  display: flex;
+  background: rgba(7, 90, 155, 0.06);
+  padding: 4px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+  gap: 4px;
+}
+
+.tabs-log button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 10px 16px;
+  border-radius: 10px;
+  color: #526f83;
+  font-weight: 800;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.tabs-log button.activo {
+  background: #ffffff;
+  color: #075a9b;
+  box-shadow: 0 4px 12px rgba(18, 48, 71, 0.08);
 }

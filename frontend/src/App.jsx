@@ -27,7 +27,7 @@ import {
   Wifi,
   X,
 } from 'lucide-react';
-import heroDoctor from './assets/doctor-network-hero.png';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8080`;
 const REQUEST_TIMEOUT_MS = 9000;
@@ -119,6 +119,7 @@ function App() {
   const [cargando, setCargando] = useState(false);
   const [accion, setAccion] = useState('');
   const [categoriaLog, setCategoriaLog] = useState('TODOS');
+  const [grupoLog, setGrupoLog] = useState('PRINCIPAL');
   const [nodoAlgoritmo, setNodoAlgoritmo] = useState(1);
   const [resultadoDonante, setResultadoDonante] = useState(null);
   const [infoAbierta, setInfoAbierta] = useState(false);
@@ -139,10 +140,22 @@ function App() {
   const nodosSospechosos = nodos.filter((nodo) => nodo.estado === 'SOSPECHOSO');
   const nodosInactivos = nodos.filter((nodo) => nodo.estado === 'INACTIVO');
   const nodoCoordinador = coordinador || nodos.find((nodo) => nodo.rol === 'COORDINADOR');
-  const categorias = ['TODOS', ...Array.from(new Set(logs.map((log) => log.categoria)))];
+  const logsPorGrupo = useMemo(() => {
+    if (grupoLog === 'PRINCIPAL') {
+      return logs.filter((log) => ['SIMULACION', 'DONANTES', 'EXCLUSION', 'CRISTIAN', 'INICIO'].includes(log.categoria));
+    } else {
+      return logs.filter((log) => ['HEARTBEAT', 'BULLY', 'TCP'].includes(log.categoria));
+    }
+  }, [logs, grupoLog]);
+
+  const categoriasDisponibles = useMemo(() => {
+    const cats = Array.from(new Set(logsPorGrupo.map((log) => log.categoria)));
+    return ['TODOS', ...cats];
+  }, [logsPorGrupo]);
+
   const logsFiltrados = categoriaLog === 'TODOS'
-    ? logs
-    : logs.filter((log) => log.categoria === categoriaLog);
+    ? logsPorGrupo
+    : logsPorGrupo.filter((log) => log.categoria === categoriaLog);
   const colaExclusion = estadoExclusion?.colaEspera || [];
   const nodoObjetivo = nodos.find((nodo) => nodo.id === Number(nodoAlgoritmo));
 
@@ -330,29 +343,7 @@ function App() {
                 <RefreshCw size={18} />
                 {cargando ? 'Actualizando...' : 'Actualizar red'}
               </button>
-              <button className="pill-button ghost" onClick={() => setInfoAbierta(true)}>
-                <HelpCircle size={18} />
-                Como funciona
-              </button>
             </div>
-          </div>
-
-          <div className="hero-media">
-            <img src={heroDoctor} alt="Doctora supervisando una red hospitalaria distribuida" />
-            <div className="float-card awards">
-              <strong>4</strong>
-              <span>Nodos</span>
-            </div>
-            <div className="float-card years">
-              <strong>2s</strong>
-              <span>Heartbeat</span>
-            </div>
-          </div>
-
-          <div className="hero-organ-card">
-            <HeartPulse size={54} />
-            <span>Hospital network</span>
-            <strong>{nodoCoordinador ? `Coordina nodo ${nodoCoordinador.id}` : 'Coordinador pendiente'}</strong>
           </div>
         </div>
 
@@ -380,7 +371,7 @@ function App() {
       <section className="resumen-grid">
         <PanelMetrica icono={<Server size={22} />} etiqueta="Nodos activos" valor={`${nodosActivos}/${nodos.length || 4}`} tono="azul" />
         <PanelMetrica icono={<ShieldCheck size={22} />} etiqueta="Coordinador" valor={nodoCoordinador ? `Nodo ${nodoCoordinador.id}` : 'Pendiente'} tono="verde" />
-        <PanelMetrica icono={<Wifi size={22} />} etiqueta="Consul" valor={`${instanciasConsul.length} instancias`} tono="gris" />
+        <PanelMetrica icono={<Wifi size={22} />} etiqueta="Consul" valor={`${instanciasConsul.length} instancias`} tono="gris" linkUrl="http://localhost:8500" />
         <PanelMetrica
           icono={<Hospital size={22} />}
           etiqueta="Estado de red"
@@ -510,8 +501,29 @@ function App() {
             texto="Muestra elecciones, heartbeats, simulaciones, sincronizacion y exclusion mutua."
             icono={<Activity size={20} />}
           />
+          <div className="tabs-log">
+            <button
+              className={grupoLog === 'PRINCIPAL' ? 'activo' : ''}
+              onClick={() => {
+                setGrupoLog('PRINCIPAL');
+                setCategoriaLog('TODOS');
+              }}
+            >
+              Principal (Acciones y Fallos)
+            </button>
+            <button
+              className={grupoLog === 'DIAGNOSTICO' ? 'activo' : ''}
+              onClick={() => {
+                setGrupoLog('DIAGNOSTICO');
+                setCategoriaLog('TODOS');
+              }}
+            >
+              Diagnóstico de Red (Latidos, Bully)
+            </button>
+          </div>
+
           <div className="filtros-log">
-            {categorias.map((categoria) => (
+            {categoriasDisponibles.map((categoria) => (
               <button
                 key={categoria}
                 className={categoriaLog === categoria ? 'activo' : ''}
@@ -653,14 +665,26 @@ function PanelHeader({ eyebrow, titulo, texto, icono }) {
   );
 }
 
-function PanelMetrica({ icono, etiqueta, valor, tono }) {
-  return (
-    <motion.article className={`metrica ${tono}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+function PanelMetrica({ icono, etiqueta, valor, tono, linkUrl }) {
+  const contenido = (
+    <>
       <div className="metrica-icono">{icono}</div>
       <div>
         <span>{etiqueta}</span>
         <strong>{valor}</strong>
       </div>
+    </>
+  );
+
+  return (
+    <motion.article className={`metrica ${tono}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      {linkUrl ? (
+        <a href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'contents', color: 'inherit', textDecoration: 'none' }}>
+          {contenido}
+        </a>
+      ) : (
+        contenido
+      )}
     </motion.article>
   );
 }
