@@ -394,6 +394,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     }
 
     public ResultadoCompatibilidad consultarCompatibilidad(SolicitudDonante solicitud) {
+        if (!accesoExclusionConcedido) {
+            throw new IllegalStateException("El nodo " + configuracionNodoLocal.getId() + " no está en la sección crítica.");
+        }
         boolean compatible = esCompatible(solicitud.getTipoSangreDonante(), solicitud.getTipoSangreReceptor());
         String mensaje = compatible
                 ? "Donante compatible para la consulta simulada"
