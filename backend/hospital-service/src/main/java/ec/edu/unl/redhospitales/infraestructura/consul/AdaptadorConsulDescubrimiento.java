@@ -28,7 +28,7 @@ public class AdaptadorConsulDescubrimiento implements PuertoDescubrimientoServic
             return discoveryClient.getInstances("hospital-service").stream()
                     .map(this::describir)
                     .toList();
-        } catch (RuntimeException excepcion) {
+        } catch (Exception excepcion) {
             return List.of("Consul no disponible: " + excepcion.getMessage());
         }
     }
@@ -52,7 +52,7 @@ public class AdaptadorConsulDescubrimiento implements PuertoDescubrimientoServic
                 }
             }
             return ids;
-        } catch (RuntimeException excepcion) {
+        } catch (Exception excepcion) {
             return Collections.emptySet();
         }
     }

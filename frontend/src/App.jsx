@@ -30,7 +30,7 @@ import {
 
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8080`;
-const REQUEST_TIMEOUT_MS = 9000;
+const REQUEST_TIMEOUT_MS = 4000;
 const tiposSangre = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
 
 const estadoVisual = {
@@ -162,12 +162,24 @@ function App() {
   async function cargarDatos(silencioso = false) {
     if (!silencioso) setCargando(true);
     try {
-      const [nodosData, coordinadorData, logsData, consulData] = await Promise.all([
+      const resultados = await Promise.allSettled([
         fetchJson('/api/nodes'),
         fetchJson('/api/nodes/coordinator'),
         fetchJson('/api/logs'),
         fetchJson('/api/nodes/consul'),
       ]);
+
+      const nodosData = resultados[0].status === 'fulfilled' ? resultados[0].value : nodos;
+      const coordinadorData = resultados[1].status === 'fulfilled' ? resultados[1].value : coordinador;
+      const logsData = resultados[2].status === 'fulfilled' ? resultados[2].value : logs;
+      const consulData = resultados[3].status === 'fulfilled' ? resultados[3].value : instanciasConsul;
+
+      const todosRechazados = resultados.every((r) => r.status === 'rejected');
+      if (todosRechazados) {
+        setError(`No se pudo conectar con el API Gateway en ${API_BASE_URL}.`);
+        if (!silencioso) setCargando(false);
+        return;
+      }
 
       const observador = seleccionarObservador(nodosData);
       let estadoData;
@@ -176,7 +188,11 @@ function App() {
           ? await fetchJson(`http://${observador.host}:${observador.httpPort}/api/estado`)
           : await fetchJson('/api/estado');
       } catch {
-        estadoData = await fetchJson('/api/estado');
+        try {
+          estadoData = await fetchJson('/api/estado');
+        } catch {
+          estadoData = estadoSistema || {};
+        }
       }
 
       setNodos(nodosData);
@@ -184,7 +200,7 @@ function App() {
       setLogs(logsData);
       setInstanciasConsul(consulData);
       setEstadoSistema(estadoData);
-      setEstadoExclusion(estadoData.exclusion);
+      setEstadoExclusion(estadoData?.exclusion || estadoExclusion);
       setUltimaActualizacion(new Date());
 
       const objetivo = nodosData.find((nodo) => nodo.id === Number(nodoAlgoritmo)) || nodosData[0];
@@ -197,10 +213,10 @@ function App() {
           const cristianDirecto = await fetchJson(`http://${objetivo.host}:${objetivo.httpPort}/api/synchronization/cristian`);
           setEstadoCristian(cristianDirecto);
         } catch {
-          setEstadoCristian(estadoData.cristian);
+          setEstadoCristian(estadoData?.cristian || estadoCristian);
         }
       } else {
-        setEstadoCristian(estadoData.cristian);
+        setEstadoCristian(estadoData?.cristian || estadoCristian);
       }
 
       setError('');

@@ -27,8 +27,8 @@ public class ConfiguracionInfraestructura {
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
         return builder
-                .setConnectTimeout(Duration.ofMillis(1000))
-                .setReadTimeout(Duration.ofMillis(1500))
+                .setConnectTimeout(Duration.ofMillis(500))
+                .setReadTimeout(Duration.ofMillis(800))
                 .build();
     }
 }

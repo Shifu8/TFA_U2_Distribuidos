@@ -62,6 +62,8 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     private final Map<String, Long> solicitudesCristian = new ConcurrentHashMap<>();
     private final AtomicBoolean eleccionEnCurso = new AtomicBoolean(false);
     private final GestorConcurrencia gestorConcurrencia = GestorConcurrencia.obtenerInstancia();
+    private final Map<Integer, Instant> nodosInalcanzables = new ConcurrentHashMap<>();
+    private static final long INALCANZABLE_TTL_MS = 5000;
 
     private volatile boolean nodoLocalOperativo = true;
     private volatile int idCoordinadorActual = -1;
@@ -143,10 +145,37 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     public List<EventoSistema> listarEventos() {
         Map<String, EventoSistema> eventos = new LinkedHashMap<>();
         agregarEventos(eventos, registroEventos.listar());
-        nodos.values().stream()
+
+        List<NodoHospitalario> nodosRemotos = nodos.values().stream()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
                 .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
-                .forEach(nodo -> agregarEventos(eventos, consultaRemotaNodos.consultarEventosLocales(nodo)));
+                .filter(nodo -> !esNodoInalcanzable(nodo.getId()))
+                .toList();
+
+        if (!nodosRemotos.isEmpty()) {
+            List<CompletableFuture<List<EventoSistema>>> futuros = nodosRemotos.stream()
+                    .map(nodo -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return consultaRemotaNodos.consultarEventosLocales(nodo);
+                        } catch (Exception e) {
+                            marcarNodoInalcanzable(nodo.getId());
+                            return List.<EventoSistema>of();
+                        }
+                    }).orTimeout(1200, TimeUnit.MILLISECONDS)
+                      .exceptionally(ex -> {
+                          marcarNodoInalcanzable(nodo.getId());
+                          return List.of();
+                      }))
+                    .toList();
+
+            for (CompletableFuture<List<EventoSistema>> futuro : futuros) {
+                try {
+                    agregarEventos(eventos, futuro.join());
+                } catch (Exception e) {
+                    LOGGER.debug("Error obteniendo eventos remotos: {}", e.getMessage());
+                }
+            }
+        }
 
         return eventos.values().stream()
                 .sorted(Comparator.comparing(EventoSistema::getFecha).reversed())
@@ -309,11 +338,24 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return obtenerEstadoExclusionMutuaLocal();
         }
 
-        return obtenerCoordinador()
-                .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
-                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
-                .flatMap(consultaRemotaNodos::consultarEstadoExclusionLocal)
-                .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
+        try {
+            return obtenerCoordinador()
+                    .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
+                    .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
+                    .filter(nodo -> !esNodoInalcanzable(nodo.getId()))
+                    .flatMap(nodo -> {
+                        try {
+                            return consultaRemotaNodos.consultarEstadoExclusionLocal(nodo);
+                        } catch (Exception e) {
+                            marcarNodoInalcanzable(nodo.getId());
+                            return Optional.empty();
+                        }
+                    })
+                    .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
+        } catch (Exception e) {
+            LOGGER.debug("Error consultando exclusion mutua remota, usando estado local: {}", e.getMessage());
+            return obtenerEstadoExclusionMutuaLocal();
+        }
     }
 
     public EstadoExclusionMutua obtenerEstadoExclusionMutuaLocal() {
@@ -841,13 +883,24 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         if (nodo.getEstado() == EstadoNodo.INACTIVO) {
             return nodo.copiar();
         }
-
-        Optional<NodoHospitalario> remoto = consultaRemotaNodos.consultarEstadoLocal(nodo);
-        if (remoto.isPresent()) {
-            actualizarNodo(nodos.get(remoto.get().getId()), remoto.get());
-            return remoto.get().copiar();
+        if (esNodoInalcanzable(nodo.getId())) {
+            NodoHospitalario copia = nodo.copiar();
+            copia.marcarSospechoso();
+            return copia;
         }
 
+        try {
+            Optional<NodoHospitalario> remoto = consultaRemotaNodos.consultarEstadoLocal(nodo);
+            if (remoto.isPresent()) {
+                limpiarNodoInalcanzable(nodo.getId());
+                actualizarNodo(nodos.get(remoto.get().getId()), remoto.get());
+                return remoto.get().copiar();
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Error consultando estado del nodo {}: {}", nodo.getId(), e.getMessage());
+        }
+
+        marcarNodoInalcanzable(nodo.getId());
         NodoHospitalario copia = nodo.copiar();
         copia.marcarSospechoso();
         return copia;
@@ -970,5 +1023,25 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
     private String valorSeguro(String valor) {
         return valor == null ? "" : valor.replace("|", " ");
+    }
+
+    private void marcarNodoInalcanzable(int nodoId) {
+        nodosInalcanzables.put(nodoId, Instant.now());
+    }
+
+    private void limpiarNodoInalcanzable(int nodoId) {
+        nodosInalcanzables.remove(nodoId);
+    }
+
+    private boolean esNodoInalcanzable(int nodoId) {
+        Instant marcado = nodosInalcanzables.get(nodoId);
+        if (marcado == null) {
+            return false;
+        }
+        if (Duration.between(marcado, Instant.now()).toMillis() > INALCANZABLE_TTL_MS) {
+            nodosInalcanzables.remove(nodoId);
+            return false;
+        }
+        return true;
     }
 }
