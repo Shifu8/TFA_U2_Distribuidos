@@ -3,28 +3,28 @@
     {
       "id": 1,
       "nombreHospital": "Hospital Isidro Ayora",
-      "host": "192.168.1.10",
+      "host": "localhost",
       "tcpPort": 9001,
       "httpPort": 8081
     },
     {
       "id": 2,
       "nombreHospital": "Hospital UTPL",
-      "host": "192.168.1.11",
+      "host": "localhost",
       "tcpPort": 9002,
       "httpPort": 8082
     },
     {
       "id": 3,
       "nombreHospital": "Hospital Clinica San Agustin",
-      "host": "192.168.1.12",
+      "host": "localhost",
       "tcpPort": 9003,
       "httpPort": 8083
     },
     {
       "id": 4,
       "nombreHospital": "Hospital Manuel Ygnacio Monteros",
-      "host": "192.168.1.13",
+      "host": "localhost",
       "tcpPort": 9004,
       "httpPort": 8084
     }

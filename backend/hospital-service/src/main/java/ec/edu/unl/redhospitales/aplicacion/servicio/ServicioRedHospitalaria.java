@@ -111,6 +111,15 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             gestorConcurrencia.reiniciar();
         }
         registrar("INICIO", "Nodo " + configuracionNodoLocal.getId() + " iniciado. Coordinador inicial: nodo " + idCoordinadorActual);
+
+        // Sincronizar Cristian una sola vez al iniciar (despues de 5 segundos para que la red este lista)
+        CompletableFuture.delayedExecutor(5, TimeUnit.SECONDS).execute(() -> {
+            try {
+                solicitarSincronizacionCristian("sincronizacion inicial al arrancar el nodo");
+            } catch (Exception e) {
+                LOGGER.error("Error al realizar la sincronizacion Cristian inicial", e);
+            }
+        });
     }
 
     public List<NodoHospitalario> listarNodos() {
@@ -468,10 +477,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
     }
 
-    @Scheduled(fixedDelayString = "${coordinacion.sincronizacion-cristian-ms:8000}", initialDelay = 4000)
-    public void sincronizarCristianProgramado() {
-        solicitarSincronizacionCristian("sincronizacion programada");
-    }
+
 
     private void iniciarEleccion(String motivo) {
         if (!estaOperativo()) {
@@ -546,10 +552,13 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return;
         }
 
+        boolean coordinadorCambiado = (idCoordinadorActual != mensaje.getIdNodoOrigen());
         idCoordinadorActual = mensaje.getIdNodoOrigen();
         aplicarRolCoordinador(idCoordinadorActual);
         origen.actualizarSenal();
-        registrar("HEARTBEAT", "Heartbeat recibido del coordinador nodo " + mensaje.getIdNodoOrigen());
+        if (coordinadorCambiado) {
+            registrar("HEARTBEAT", "Nuevo coordinador detectado via heartbeat: nodo " + mensaje.getIdNodoOrigen());
+        }
     }
 
     private void procesarElection(MensajeTcp mensaje) {
@@ -794,7 +803,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         destino.setHttpPort(fuente.getHttpPort());
         destino.setEstado(fuente.getEstado());
         destino.setRol(fuente.getRol());
-        destino.setUltimaSenal(fuente.getUltimaSenal());
+        destino.actualizarSenal();
     }
 
     private boolean solicitarSincronizacionCristian(String motivo) {
