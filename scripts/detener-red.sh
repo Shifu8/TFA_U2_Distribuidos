@@ -13,9 +13,11 @@ for pid_file in "$LOG_DIR"/*.pid; do
   [[ -e "$pid_file" ]] || continue
   pid="$(cat "$pid_file")"
   name="$(basename "$pid_file" .pid)"
-  if kill -0 "$pid" >/dev/null 2>&1; then
+  if ps -p "$pid" >/dev/null 2>&1; then
     echo "Deteniendo $name PID=$pid"
-    kill "$pid" >/dev/null 2>&1 || true
+    if ! kill "$pid" >/dev/null 2>&1; then
+      sudo kill "$pid" >/dev/null 2>&1 || true
+    fi
   else
     echo "$name ya no esta activo"
   fi

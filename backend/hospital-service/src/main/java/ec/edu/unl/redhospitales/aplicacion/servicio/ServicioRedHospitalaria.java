@@ -461,9 +461,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
         long silencioMs = Duration.between(coordinador.getUltimaSenal(), reloj.ahora()).toMillis();
         if (silencioMs > configuracionCoordinacion.getTimeoutHeartbeatMs()) {
-            coordinador.marcarInactivo();
+            coordinador.marcarSospechoso();
             registrar("HEARTBEAT", "No se recibio heartbeat del coordinador " + coordinador.getId()
-                    + " durante " + silencioMs + " ms");
+                    + " durante " + silencioMs + " ms. Se marca como SOSPECHOSO, no como INACTIVO.");
             iniciarEleccion("timeout de heartbeat del coordinador");
         }
     }
@@ -747,7 +747,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             registrar("TCP", "No se pudo enviar " + tipo + " al nodo " + destino.getId());
         }
         if (!enviado) {
-            destino.marcarInactivo();
+            destino.marcarSospechoso();
         }
         return enviado;
     }
@@ -780,7 +780,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
 
         NodoHospitalario copia = nodo.copiar();
-        copia.marcarInactivo();
+        copia.marcarSospechoso();
         return copia;
     }
 

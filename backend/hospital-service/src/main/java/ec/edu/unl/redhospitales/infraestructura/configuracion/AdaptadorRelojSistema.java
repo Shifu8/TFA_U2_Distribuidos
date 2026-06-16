@@ -23,11 +23,18 @@ public class AdaptadorRelojSistema implements PuertoReloj {
 
     @Override
     public boolean ajustarSistema(Instant nuevaHora) {
-        if (!esLinux()) {
-            LOGGER.warn("Ajuste de reloj del sistema omitido: solo esta preparado para Linux/Ubuntu");
-            return false;
+        if (esLinux()) {
+            return ajustarLinux(nuevaHora);
+        }
+        if (esWindows()) {
+            return ajustarWindows(nuevaHora);
         }
 
+        LOGGER.warn("Ajuste de reloj del sistema omitido: sistema operativo no soportado para ajuste automatico");
+        return false;
+    }
+
+    private boolean ajustarLinux(Instant nuevaHora) {
         ejecutarIgnorandoError(comandoPrivilegiado("timedatectl", "set-ntp", "false"));
         boolean ajustado = ejecutar(comandoPrivilegiado("date", "-u", "-s", "@" + nuevaHora.getEpochSecond()));
         if (!ajustado) {
@@ -36,8 +43,29 @@ public class AdaptadorRelojSistema implements PuertoReloj {
         return ajustado;
     }
 
+    private boolean ajustarWindows(Instant nuevaHora) {
+        String script = "$fecha=[DateTime]'1970-01-01T00:00:00Z';"
+                + "Set-Date -Date $fecha.AddMilliseconds(" + nuevaHora.toEpochMilli() + ").ToLocalTime()";
+        boolean ajustado = ejecutar(List.of(
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script
+        ));
+        if (!ajustado) {
+            LOGGER.warn("No se pudo ajustar el reloj del sistema en Windows. Ejecuta PowerShell como Administrador.");
+        }
+        return ajustado;
+    }
+
     private boolean esLinux() {
         return System.getProperty("os.name", "").toLowerCase().contains("linux");
+    }
+
+    private boolean esWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("windows");
     }
 
     private List<String> comandoPrivilegiado(String... comando) {

@@ -63,9 +63,18 @@ public class NodoHospitalario {
         this.rol = RolNodo.SEGUIDOR;
     }
 
+    public void marcarSospechoso() {
+        if (this.estado != EstadoNodo.INACTIVO) {
+            this.estado = EstadoNodo.SOSPECHOSO;
+            this.rol = RolNodo.SEGUIDOR;
+        }
+    }
+
     public void actualizarSenal() {
         this.ultimaSenal = Instant.now();
-        this.estado = EstadoNodo.ACTIVO;
+        if (this.estado != EstadoNodo.INACTIVO) {
+            this.estado = EstadoNodo.ACTIVO;
+        }
     }
 
     public int getId() {

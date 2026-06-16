@@ -5,5 +5,6 @@ package ec.edu.unl.redhospitales.dominio.enumeracion;
 
 public enum EstadoNodo {
     ACTIVO,
+    SOSPECHOSO,
     INACTIVO
 }

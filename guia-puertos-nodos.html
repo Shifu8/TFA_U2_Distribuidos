@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Configuracion de puertos y nodos</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 17mm 16mm 18mm;
+    }
+
+    :root {
+      --ink: #172033;
+      --muted: #566176;
+      --line: #d8deea;
+      --blue: #155eef;
+      --blue-soft: #eef4ff;
+      --green: #067647;
+      --green-soft: #ecfdf3;
+      --amber: #93370d;
+      --amber-soft: #fffaeb;
+      --code: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.48;
+      background: #fff;
+    }
+
+    h1, h2, h3, p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 7px;
+      font-size: 25pt;
+      line-height: 1.12;
+      letter-spacing: -0.4px;
+    }
+
+    h2 {
+      margin: 22px 0 9px;
+      padding-bottom: 5px;
+      color: #123b80;
+      font-size: 15pt;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h3 {
+      margin: 15px 0 6px;
+      font-size: 11.5pt;
+    }
+
+    p {
+      margin-bottom: 8px;
+    }
+
+    ul, ol {
+      margin: 6px 0 10px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin-bottom: 3px;
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 9.2pt;
+    }
+
+    .cover {
+      padding: 15mm 0 7mm;
+    }
+
+    .eyebrow {
+      margin-bottom: 10px;
+      color: var(--blue);
+      font-size: 9pt;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      max-width: 620px;
+      color: var(--muted);
+      font-size: 12pt;
+    }
+
+    .meta {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 10px;
+      color: #344054;
+      font-size: 9pt;
+      background: #f5f7fa;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 9px;
+      margin-top: 16px;
+    }
+
+    .summary div {
+      padding: 10px;
+      background: var(--blue-soft);
+      border: 1px solid #c7d7fe;
+      border-radius: 8px;
+    }
+
+    .summary strong {
+      display: block;
+      color: #123b80;
+      font-size: 12pt;
+    }
+
+    .summary span {
+      color: var(--muted);
+      font-size: 8.6pt;
+    }
+
+    table {
+      width: 100%;
+      margin: 8px 0 12px;
+      border-collapse: collapse;
+      page-break-inside: avoid;
+    }
+
+    th, td {
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+      border: 1px solid var(--line);
+    }
+
+    th {
+      color: #123b80;
+      background: var(--blue-soft);
+      font-size: 9.5pt;
+    }
+
+    td {
+      font-size: 9.5pt;
+    }
+
+    pre {
+      margin: 7px 0 12px;
+      padding: 10px 12px;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: #f8fafc;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 8.7pt;
+      line-height: 1.43;
+      background: var(--code);
+      border-radius: 7px;
+      page-break-inside: avoid;
+    }
+
+    .note, .warning, .success {
+      margin: 10px 0;
+      padding: 9px 11px;
+      border-left: 4px solid;
+      border-radius: 5px;
+      page-break-inside: avoid;
+    }
+
+    .note {
+      background: var(--blue-soft);
+      border-color: var(--blue);
+    }
+
+    .warning {
+      color: #6c2e0b;
+      background: var(--amber-soft);
+      border-color: #f79009;
+    }
+
+    .success {
+      color: #045d3c;
+      background: var(--green-soft);
+      border-color: var(--green);
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .keep {
+      page-break-inside: avoid;
+    }
+
+    .footer {
+      margin-top: 22px;
+      padding-top: 8px;
+      color: var(--muted);
+      font-size: 8.5pt;
+      border-top: 1px solid var(--line);
+    }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="eyebrow">TFA Unidad 2 - Sistemas Distribuidos</div>
+    <h1>Configuracion de puertos y nodos</h1>
+    <p class="subtitle">
+      Guia para desplegar la red distribuida de cuatro hospitales en computadoras
+      conectadas al mismo router.
+    </p>
+    <div class="meta">Proyecto: TFA_U2_Distribuidos</div>
+
+    <div class="summary">
+      <div>
+        <strong>4 nodos</strong>
+        <span>Un proceso Java por computadora</span>
+      </div>
+      <div>
+        <strong>Solo TCP</strong>
+        <span>HTTP, Consul y sockets distribuidos</span>
+      </div>
+      <div>
+        <strong>Una LAN</strong>
+        <span>Sin abrir puertos hacia Internet</span>
+      </div>
+    </div>
+  </section>
+
+  <h2>1. Puertos que deben habilitarse</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Computadora</th>
+        <th>Puertos TCP entrantes</th>
+        <th>Servicios</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>PC 1 - Nodo principal</strong></td>
+        <td><code>5173, 8080, 8081, 8500, 9001</code></td>
+        <td>Frontend, API Gateway, API del nodo 1, Consul y TCP del nodo 1</td>
+      </tr>
+      <tr>
+        <td><strong>PC 2 - Nodo 2</strong></td>
+        <td><code>8082, 9002</code></td>
+        <td>API HTTP y comunicacion TCP del nodo 2</td>
+      </tr>
+      <tr>
+        <td><strong>PC 3 - Nodo 3</strong></td>
+        <td><code>8083, 9003</code></td>
+        <td>API HTTP y comunicacion TCP del nodo 3</td>
+      </tr>
+      <tr>
+        <td><strong>PC 4 - Nodo 4</strong></td>
+        <td><code>8084, 9004</code></td>
+        <td>API HTTP y comunicacion TCP del nodo 4</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Puerto</th>
+        <th>Funcion</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><code>5173</code></td><td>Dashboard React servido por Vite.</td></tr>
+      <tr><td><code>8080</code></td><td>API Gateway que recibe las solicitudes del frontend.</td></tr>
+      <tr><td><code>8081-8084</code></td><td>API HTTP de cada servicio hospitalario.</td></tr>
+      <tr><td><code>8500</code></td><td>Consul HTTP y su interfaz web, ejecutado solamente en la PC 1.</td></tr>
+      <tr><td><code>9001-9004</code></td><td>Sockets TCP para Bully, Cristian, heartbeats y exclusion mutua.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>Importante:</strong> todos estos puertos usan TCP. Para este proyecto no
+    es necesario habilitar UDP ni los puertos de cluster de Consul
+    <code>8300/8301/8302</code>, porque se ejecuta un solo agente Consul en modo
+    desarrollo.
+  </div>
+
+  <div class="warning">
+    No configure redireccion de puertos en el router. Los equipos solamente deben
+    comunicarse dentro de la misma red local.
+  </div>
+
+  <h2>2. Configurar las direcciones IP</h2>
+
+  <p>En cada computadora Ubuntu, obtener la direccion IP asignada por el router:</p>
+
+  <pre>hostname -I</pre>
+
+  <p>
+    Luego editar <code>nodes.json</code>. El archivo debe ser identico en las cuatro
+    computadoras. Sustituya las IP de ejemplo por las IP reales:
+  </p>
+
+  <pre>{
+  "nodos": [
+    {
+      "id": 1,
+      "nombreHospital": "Hospital 1",
+      "host": "192.168.1.10",
+      "tcpPort": 9001,
+      "httpPort": 8081
+    },
+    {
+      "id": 2,
+      "nombreHospital": "Hospital 2",
+      "host": "192.168.1.11",
+      "tcpPort": 9002,
+      "httpPort": 8082
+    },
+    {
+      "id": 3,
+      "nombreHospital": "Hospital 3",
+      "host": "192.168.1.12",
+      "tcpPort": 9003,
+      "httpPort": 8083
+    },
+    {
+      "id": 4,
+      "nombreHospital": "Hospital 4",
+      "host": "192.168.1.13",
+      "tcpPort": 9004,
+      "httpPort": 8084
+    }
+  ]
+}</pre>
+
+  <div class="warning">
+    No deje <code>localhost</code> en <code>nodes.json</code> cuando los nodos se
+    ejecuten en computadoras distintas. <code>localhost</code> siempre apunta a la
+    misma computadora desde la que se utiliza.
+  </div>
+
+  <div class="note">
+    Es recomendable reservar las cuatro direcciones IP en el router o configurar
+    IP estaticas. Asi no cambiaran durante la demostracion.
+  </div>
+
+  <h2 class="page-break">3. Habilitar el firewall en Ubuntu</h2>
+
+  <p>
+    Los siguientes comandos limitan el acceso a la red local
+    <code>192.168.1.0/24</code>. Si las IP de los equipos comienzan con otro rango,
+    por ejemplo <code>192.168.0.x</code>, utilice <code>192.168.0.0/24</code>.
+  </p>
+
+  <div class="keep">
+    <h3>PC 1 - Nodo principal</h3>
+    <pre>sudo ufw allow from 192.168.1.0/24 to any port 5173 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8080 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8081 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 8500 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 9001 proto tcp
+sudo ufw enable</pre>
+  </div>
+
+  <div class="keep">
+    <h3>PC 2 - Nodo 2</h3>
+    <pre>sudo ufw allow from 192.168.1.0/24 to any port 8082 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 9002 proto tcp
+sudo ufw enable</pre>
+  </div>
+
+  <div class="keep">
+    <h3>PC 3 - Nodo 3</h3>
+    <pre>sudo ufw allow from 192.168.1.0/24 to any port 8083 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 9003 proto tcp
+sudo ufw enable</pre>
+  </div>
+
+  <div class="keep">
+    <h3>PC 4 - Nodo 4</h3>
+    <pre>sudo ufw allow from 192.168.1.0/24 to any port 8084 proto tcp
+sudo ufw allow from 192.168.1.0/24 to any port 9004 proto tcp
+sudo ufw enable</pre>
+  </div>
+
+  <p>Comprobar las reglas activas en cada computadora:</p>
+
+  <pre>sudo ufw status numbered</pre>
+
+  <h2>4. Iniciar la red</h2>
+
+  <p>
+    Todas las computadoras deben tener la misma version del proyecto y Java 21.
+    La PC 1 tambien necesita Consul, Maven, Node.js y npm para levantar todos sus
+    componentes.
+  </p>
+
+  <h3>Paso 1: iniciar primero la PC 1</h3>
+
+  <pre>cd TFA_U2_Distribuidos
+bash scripts/iniciar-nodo.sh 1</pre>
+
+  <p>Este comando inicia:</p>
+  <ul>
+    <li>Consul en el puerto <code>8500</code>.</li>
+    <li>API Gateway en el puerto <code>8080</code>.</li>
+    <li>Frontend en el puerto <code>5173</code>.</li>
+    <li>Nodo 1 en HTTP <code>8081</code> y TCP <code>9001</code>.</li>
+  </ul>
+
+  <h3>Paso 2: iniciar las otras computadoras</h3>
+
+  <pre># PC 2
+bash scripts/iniciar-nodo.sh 2
+
+# PC 3
+bash scripts/iniciar-nodo.sh 3
+
+# PC 4
+bash scripts/iniciar-nodo.sh 4</pre>
+
+  <div class="success">
+    Orden recomendado: PC 1, PC 2, PC 3 y PC 4. Cuando los cuatro nodos esten
+    activos, el algoritmo Bully debe seleccionar al nodo 4 como coordinador.
+  </div>
+
+  <h2 class="page-break">5. Verificar la comunicacion</h2>
+
+  <p>Desde la PC 1, probar los sockets TCP de las otras computadoras:</p>
+
+  <pre>nc -vz 192.168.1.11 9002
+nc -vz 192.168.1.12 9003
+nc -vz 192.168.1.13 9004</pre>
+
+  <p>Probar las API HTTP de los nodos:</p>
+
+  <pre>curl http://192.168.1.11:8082/actuator/health
+curl http://192.168.1.12:8083/actuator/health
+curl http://192.168.1.13:8084/actuator/health</pre>
+
+  <p>Desde cualquiera de las otras computadoras, probar la PC principal:</p>
+
+  <pre>nc -vz 192.168.1.10 8500
+nc -vz 192.168.1.10 9001
+curl http://192.168.1.10:8080/actuator/health</pre>
+
+  <p>Finalmente, abrir en un navegador conectado a la misma red:</p>
+
+  <pre>Dashboard: http://192.168.1.10:5173
+Consul:    http://192.168.1.10:8500/ui
+Gateway:   http://192.168.1.10:8080</pre>
+
+  <h2>6. Diagnostico rapido</h2>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Problema</th>
+        <th>Comprobacion</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>No se abre el dashboard</td>
+        <td>Verificar el puerto <code>5173</code>, la IP de la PC 1 y el proceso Vite.</td>
+      </tr>
+      <tr>
+        <td>Un nodo no aparece en Consul</td>
+        <td>Comprobar acceso al puerto <code>8500</code> y que <code>nodes.json</code> tenga IP reales.</td>
+      </tr>
+      <tr>
+        <td>No funciona Bully o Cristian</td>
+        <td>Probar con <code>nc</code> los puertos <code>9001-9004</code>.</td>
+      </tr>
+      <tr>
+        <td>La simulacion remota falla</td>
+        <td>Comprobar los puertos HTTP <code>8081-8084</code>.</td>
+      </tr>
+      <tr>
+        <td>La IP cambio</td>
+        <td>Actualizar <code>nodes.json</code> en las cuatro PCs y reiniciar la red.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Documento generado para el proyecto TFA_U2_Distribuidos. Configuracion basada
+    en README.md, ARCHITECTURE.md, application.yml y scripts/iniciar-nodo.sh.
+  </div>
+</body>
+</html>
