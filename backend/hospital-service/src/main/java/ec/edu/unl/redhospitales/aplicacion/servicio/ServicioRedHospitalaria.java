@@ -145,7 +145,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         agregarEventos(eventos, registroEventos.listar());
         nodos.values().stream()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
-                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO && nodo.getEstado() != EstadoNodo.SOSPECHOSO)
                 .forEach(nodo -> agregarEventos(eventos, consultaRemotaNodos.consultarEventosLocales(nodo)));
 
         return eventos.values().stream()
@@ -311,7 +311,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
         return obtenerCoordinador()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
-                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO && nodo.getEstado() != EstadoNodo.SOSPECHOSO)
                 .flatMap(consultaRemotaNodos::consultarEstadoExclusionLocal)
                 .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
     }
@@ -394,6 +394,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     }
 
     public ResultadoCompatibilidad consultarCompatibilidad(SolicitudDonante solicitud) {
+        if (!accesoExclusionConcedido) {
+            throw new IllegalStateException("El nodo " + configuracionNodoLocal.getId() + " no está en la sección crítica.");
+        }
         boolean compatible = esCompatible(solicitud.getTipoSangreDonante(), solicitud.getTipoSangreReceptor());
         String mensaje = compatible
                 ? "Donante compatible para la consulta simulada"
@@ -509,7 +512,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
                 boolean activoEnConsul = nodosActivosConsul.contains(nodo.getId());
                 if (activoEnConsul) {
-                    if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+                    if (nodo.getEstado() == EstadoNodo.INACTIVO || nodo.getEstado() == EstadoNodo.SOSPECHOSO) {
                         nodo.marcarActivo();
                         registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como ACTIVO a través de Consul.");
                     }
@@ -867,7 +870,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         if (nodo.getId() == configuracionNodoLocal.getId()) {
             return nodo.copiar();
         }
-        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+        if (nodo.getEstado() == EstadoNodo.INACTIVO || nodo.getEstado() == EstadoNodo.SOSPECHOSO) {
             return nodo.copiar();
         }
 

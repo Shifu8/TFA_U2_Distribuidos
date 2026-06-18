@@ -163,10 +163,10 @@ function App() {
     if (!silencioso) setCargando(true);
     try {
       const [nodosData, coordinadorData, logsData, consulData] = await Promise.all([
-        fetchJson('/api/nodes'),
-        fetchJson('/api/nodes/coordinator'),
-        fetchJson('/api/logs'),
-        fetchJson('/api/nodes/consul'),
+        fetchJson('/api/nodes').catch(() => []),
+        fetchJson('/api/nodes/coordinator').catch(() => null),
+        fetchJson('/api/logs').catch(() => []),
+        fetchJson('/api/nodes/consul').catch(() => []),
       ]);
 
       const observador = seleccionarObservador(nodosData);
@@ -176,7 +176,15 @@ function App() {
           ? await fetchJson(`http://${observador.host}:${observador.httpPort}/api/estado`)
           : await fetchJson('/api/estado');
       } catch {
-        estadoData = await fetchJson('/api/estado');
+        try {
+          estadoData = await fetchJson('/api/estado');
+        } catch {
+          estadoData = {
+            exclusion: { nodoEnSeccionCritica: null, colaEspera: [] },
+            cristian: { rtt: 0, horaLocal: '', horaAjustada: '' },
+            estadoLocal: 'SEGUIDOR'
+          };
+        }
       }
 
       setNodos(nodosData);
@@ -614,10 +622,18 @@ function App() {
               </select>
             </label>
 
-            <button className="pill-button primary full" disabled={accion === 'donante'}>
+            <button 
+              className="pill-button primary full" 
+              disabled={accion === 'donante' || estadoExclusion?.nodoEnSeccionCritica !== Number(nodoAlgoritmo)}
+            >
               <Send size={18} />
               Solicitar organo
             </button>
+            {estadoExclusion?.nodoEnSeccionCritica !== Number(nodoAlgoritmo) && (
+              <p style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#dc2626', textAlign: 'center', fontWeight: '500' }}>
+                * El nodo seleccionado debe estar en la sección crítica.
+              </p>
+            )}
           </form>
 
           {resultadoDonante && (
