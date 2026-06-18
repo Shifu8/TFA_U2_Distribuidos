@@ -25,14 +25,21 @@ public class ClienteTcpHospitalario implements PuertoComunicacionTcp {
 
     private final ObjectMapper objectMapper;
     private final ConfiguracionTcpLocal configuracionTcpLocal;
+    private final ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos;
 
-    public ClienteTcpHospitalario(ObjectMapper objectMapper, ConfiguracionTcpLocal configuracionTcpLocal) {
+    public ClienteTcpHospitalario(ObjectMapper objectMapper, ConfiguracionTcpLocal configuracionTcpLocal, ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos) {
         this.objectMapper = objectMapper;
         this.configuracionTcpLocal = configuracionTcpLocal;
+        this.gestorCortocircuitos = gestorCortocircuitos;
     }
 
     @Override
     public boolean enviar(MensajeTcp mensaje, NodoHospitalario destino) {
+        if (!gestorCortocircuitos.permitirLlamada(destino.getId())) {
+            LOGGER.debug("[CIRCUIT BREAKER] Llamada TCP cancelada al nodo {} - Circuito ABIERTO", destino.getId());
+            return false;
+        }
+
         try (Socket socket = new Socket()) {
             socket.connect(new InetSocketAddress(destino.getHost(), destino.getTcpPort()), configuracionTcpLocal.getConnectTimeoutMs());
             socket.setSoTimeout(configuracionTcpLocal.getReadTimeoutMs());
@@ -41,9 +48,11 @@ public class ClienteTcpHospitalario implements PuertoComunicacionTcp {
                 escritor.newLine();
                 escritor.flush();
             }
+            gestorCortocircuitos.registrarExito(destino.getId());
             return true;
         } catch (Exception excepcion) {
             LOGGER.debug("Fallo al enviar {} al nodo {}:{} - {}", mensaje.getTipo(), destino.getHost(), destino.getTcpPort(), excepcion.getMessage());
+            gestorCortocircuitos.registrarFallo(destino.getId());
             return false;
         }
     }

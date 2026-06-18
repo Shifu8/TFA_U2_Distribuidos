@@ -17,9 +17,11 @@ public class AdaptadorHttpControlRemotoNodos implements PuertoControlRemotoNodos
     private static final Logger LOGGER = LoggerFactory.getLogger(AdaptadorHttpControlRemotoNodos.class);
 
     private final RestTemplate restTemplate;
+    private final ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos;
 
-    public AdaptadorHttpControlRemotoNodos(RestTemplate restTemplate) {
+    public AdaptadorHttpControlRemotoNodos(RestTemplate restTemplate, ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos) {
         this.restTemplate = restTemplate;
+        this.gestorCortocircuitos = gestorCortocircuitos;
     }
 
     @Override
@@ -48,12 +50,23 @@ public class AdaptadorHttpControlRemotoNodos implements PuertoControlRemotoNodos
     }
 
     private boolean ejecutarPost(NodoHospitalario nodo, String ruta) {
+        if (!gestorCortocircuitos.permitirLlamada(nodo.getId())) {
+            LOGGER.debug("[CIRCUIT BREAKER] Solicitud HTTP cancelada al nodo {} ({}) - Circuito ABIERTO", nodo.getId(), ruta);
+            return false;
+        }
         String url = "http://" + nodo.getHost() + ":" + nodo.getHttpPort() + ruta;
         try {
             ResponseEntity<String> respuesta = restTemplate.postForEntity(url, null, String.class);
-            return respuesta.getStatusCode().is2xxSuccessful();
+            boolean exito = respuesta.getStatusCode().is2xxSuccessful();
+            if (exito) {
+                gestorCortocircuitos.registrarExito(nodo.getId());
+            } else {
+                gestorCortocircuitos.registrarFallo(nodo.getId());
+            }
+            return exito;
         } catch (RuntimeException excepcion) {
             LOGGER.warn("No se pudo llamar a {}: {}", url, excepcion.getMessage());
+            gestorCortocircuitos.registrarFallo(nodo.getId());
             return false;
         }
     }

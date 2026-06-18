@@ -25,28 +25,41 @@ public class AdaptadorHttpConsultaRemotaNodos implements PuertoConsultaRemotaNod
     private static final Logger LOGGER = LoggerFactory.getLogger(AdaptadorHttpConsultaRemotaNodos.class);
 
     private final RestTemplate restTemplate;
+    private final ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos;
 
-    public AdaptadorHttpConsultaRemotaNodos(RestTemplate restTemplate) {
+    public AdaptadorHttpConsultaRemotaNodos(RestTemplate restTemplate, ec.edu.unl.redhospitales.infraestructura.soporte.GestorCortocircuitos gestorCortocircuitos) {
         this.restTemplate = restTemplate;
+        this.gestorCortocircuitos = gestorCortocircuitos;
     }
 
     @Override
     public Optional<NodoHospitalario> consultarEstadoLocal(NodoHospitalario nodo) {
+        if (!gestorCortocircuitos.permitirLlamada(nodo.getId())) {
+            LOGGER.debug("[CIRCUIT BREAKER] Consulta HTTP cancelada al nodo {} (EstadoLocal) - Circuito ABIERTO", nodo.getId());
+            return Optional.empty();
+        }
         String url = url(nodo, "/api/nodes/local");
         try {
             NodoRemotoDto dto = restTemplate.getForObject(url, NodoRemotoDto.class);
+            gestorCortocircuitos.registrarExito(nodo.getId());
             return dto == null ? Optional.empty() : Optional.of(dto.aModelo());
         } catch (RuntimeException excepcion) {
             LOGGER.debug("No se pudo consultar estado local en {}: {}", url, excepcion.getMessage());
+            gestorCortocircuitos.registrarFallo(nodo.getId());
             return Optional.empty();
         }
     }
 
     @Override
     public List<EventoSistema> consultarEventosLocales(NodoHospitalario nodo) {
+        if (!gestorCortocircuitos.permitirLlamada(nodo.getId())) {
+            LOGGER.debug("[CIRCUIT BREAKER] Consulta HTTP cancelada al nodo {} (EventosLocales) - Circuito ABIERTO", nodo.getId());
+            return List.of();
+        }
         String url = url(nodo, "/api/logs/local");
         try {
             EventoRemotoDto[] respuesta = restTemplate.getForObject(url, EventoRemotoDto[].class);
+            gestorCortocircuitos.registrarExito(nodo.getId());
             if (respuesta == null) {
                 return List.of();
             }
@@ -55,18 +68,25 @@ public class AdaptadorHttpConsultaRemotaNodos implements PuertoConsultaRemotaNod
                     .toList();
         } catch (RuntimeException excepcion) {
             LOGGER.debug("No se pudo consultar logs locales en {}: {}", url, excepcion.getMessage());
+            gestorCortocircuitos.registrarFallo(nodo.getId());
             return List.of();
         }
     }
 
     @Override
     public Optional<EstadoExclusionMutua> consultarEstadoExclusionLocal(NodoHospitalario nodo) {
+        if (!gestorCortocircuitos.permitirLlamada(nodo.getId())) {
+            LOGGER.debug("[CIRCUIT BREAKER] Consulta HTTP cancelada al nodo {} (ExclusionLocal) - Circuito ABIERTO", nodo.getId());
+            return Optional.empty();
+        }
         String url = url(nodo, "/api/exclusion/local");
         try {
             EstadoExclusionMutua estado = restTemplate.getForObject(url, EstadoExclusionMutua.class);
+            gestorCortocircuitos.registrarExito(nodo.getId());
             return Optional.ofNullable(estado);
         } catch (RuntimeException excepcion) {
             LOGGER.debug("No se pudo consultar exclusion mutua local en {}: {}", url, excepcion.getMessage());
+            gestorCortocircuitos.registrarFallo(nodo.getId());
             return Optional.empty();
         }
     }
