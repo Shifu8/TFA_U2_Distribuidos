@@ -436,6 +436,10 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         NodoHospitalario origen = nodos.get(mensaje.getIdNodoOrigen());
         if (origen != null) {
             origen.actualizarSenal();
+            if (origen.getEstado() == EstadoNodo.SOSPECHOSO) {
+                origen.marcarActivo();
+                registrar("RED", "Nodo " + origen.getId() + " restablecido (mensaje TCP recibido). Marcado como ACTIVO.");
+            }
         }
 
         switch (mensaje.getTipo()) {
@@ -509,8 +513,6 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
                 return;
             }
 
-            boolean coordinadorSeCayo = false;
-
             for (NodoHospitalario nodo : nodos.values()) {
                 if (nodo.getId() == configuracionNodoLocal.getId()) {
                     continue;
@@ -522,20 +524,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
                         nodo.marcarActivo();
                         registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como ACTIVO a través de Consul.");
                     }
-                } else {
-                    if (nodo.getEstado() != EstadoNodo.INACTIVO) {
-                        nodo.marcarInactivo();
-                        registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como INACTIVO a través de Consul.");
-                        if (nodo.getId() == idCoordinadorActual) {
-                            coordinadorSeCayo = true;
-                        }
-                    }
                 }
-            }
-
-            if (coordinadorSeCayo) {
-                registrar("BULLY", "El coordinador (nodo " + idCoordinadorActual + ") se ha caído según Consul. Iniciando elección...");
-                iniciarEleccion("coordinador caido detectado por Consul");
             }
         } catch (Exception e) {
             LOGGER.error("Error al sincronizar estado de nodos con Consul", e);
@@ -886,9 +875,8 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return remoto.get().copiar();
         }
 
-        NodoHospitalario copia = nodo.copiar();
-        copia.marcarSospechoso();
-        return copia;
+        nodo.marcarSospechoso();
+        return nodo.copiar();
     }
 
     private void actualizarNodo(NodoHospitalario destino, NodoHospitalario fuente) {
