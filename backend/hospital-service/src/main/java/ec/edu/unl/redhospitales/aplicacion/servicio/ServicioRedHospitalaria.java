@@ -394,20 +394,13 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
     }
 
     public ResultadoCompatibilidad consultarCompatibilidad(SolicitudDonante solicitud) {
-        String coordinador = obtenerCoordinador()
-                .map(NodoHospitalario::getNombreHospital)
-                .orElse("Sin coordinador");
-
-        if (!accesoExclusionConcedido) {
-            String mensaje = "Acceso denegado: el nodo no posee el token de exclusion mutua para consultar donantes";
-            registrar("EXCLUSION", mensaje);
-            return new ResultadoCompatibilidad(false, mensaje, coordinador, solicitud.getUrgencia());
-        }
-
         boolean compatible = esCompatible(solicitud.getTipoSangreDonante(), solicitud.getTipoSangreReceptor());
         String mensaje = compatible
                 ? "Donante compatible para la consulta simulada"
                 : "Donante no compatible para la consulta simulada";
+        String coordinador = obtenerCoordinador()
+                .map(NodoHospitalario::getNombreHospital)
+                .orElse("Sin coordinador");
 
         ResultadoCompatibilidad resultado = new ResultadoCompatibilidad(compatible, mensaje, coordinador, solicitud.getUrgencia());
         registrar("DONANTES", "Consulta de donante " + normalizar(solicitud.getTipoSangreDonante())
