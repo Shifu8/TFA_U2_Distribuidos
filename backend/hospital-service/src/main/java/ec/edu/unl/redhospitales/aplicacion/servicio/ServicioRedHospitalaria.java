@@ -512,7 +512,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
                 boolean activoEnConsul = nodosActivosConsul.contains(nodo.getId());
                 if (activoEnConsul) {
-                    if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+                    if (nodo.getEstado() == EstadoNodo.INACTIVO || nodo.getEstado() == EstadoNodo.SOSPECHOSO) {
                         nodo.marcarActivo();
                         registrar("CONSUL", "Nodo " + nodo.getId() + " detectado como ACTIVO a través de Consul.");
                     }

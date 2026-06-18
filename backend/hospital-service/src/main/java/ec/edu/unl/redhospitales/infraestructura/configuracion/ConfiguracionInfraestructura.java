@@ -31,4 +31,29 @@ public class ConfiguracionInfraestructura {
                 .setReadTimeout(Duration.ofMillis(1500))
                 .build();
     }
+
+    @Bean
+    public com.ecwid.consul.v1.ConsulClient consulClient(
+            @org.springframework.beans.factory.annotation.Value("${spring.cloud.consul.host:localhost}") String consulHost,
+            @org.springframework.beans.factory.annotation.Value("${spring.cloud.consul.port:8500}") int consulPort
+    ) {
+        int timeoutMillis = 1500;
+        org.apache.http.client.config.RequestConfig requestConfig = org.apache.http.client.config.RequestConfig.custom()
+                .setConnectTimeout(timeoutMillis)
+                .setSocketTimeout(timeoutMillis)
+                .setConnectionRequestTimeout(timeoutMillis)
+                .build();
+
+        org.apache.http.impl.client.CloseableHttpClient httpClient = org.apache.http.impl.client.HttpClientBuilder.create()
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+
+        com.ecwid.consul.v1.ConsulRawClient rawClient = com.ecwid.consul.v1.ConsulRawClient.Builder.builder()
+                .setHost(consulHost)
+                .setPort(consulPort)
+                .setHttpClient(httpClient)
+                .build();
+
+        return new com.ecwid.consul.v1.ConsulClient(rawClient);
+    }
 }

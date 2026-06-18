@@ -18,6 +18,10 @@ spring:
         health-check-path: /actuator/health
         prefer-ip-address: true
         ip-address: ${NODE_HOST:localhost}
+  task:
+    scheduling:
+      pool:
+        size: 5
 
 node:
   id: ${NODE_ID:1}
