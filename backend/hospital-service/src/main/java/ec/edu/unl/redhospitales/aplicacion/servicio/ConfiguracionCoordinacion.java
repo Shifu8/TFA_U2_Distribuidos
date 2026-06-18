@@ -14,6 +14,7 @@ public class ConfiguracionCoordinacion {
     private long sincronizacionCristianMs = 8000;
     private int maximoLogs = 300;
     private boolean ajustarRelojSistema = true;
+    private boolean gestionConsulAutomatica = false;
 
     public long getHeartbeatMs() {
         return heartbeatMs;
@@ -61,5 +62,13 @@ public class ConfiguracionCoordinacion {
 
     public void setAjustarRelojSistema(boolean ajustarRelojSistema) {
         this.ajustarRelojSistema = ajustarRelojSistema;
+    }
+
+    public boolean isGestionConsulAutomatica() {
+        return gestionConsulAutomatica;
+    }
+
+    public void setGestionConsulAutomatica(boolean gestionConsulAutomatica) {
+        this.gestionConsulAutomatica = gestionConsulAutomatica;
     }
 }

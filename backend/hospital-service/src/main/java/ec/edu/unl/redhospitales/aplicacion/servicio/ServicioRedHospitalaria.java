@@ -494,6 +494,11 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return;
         }
 
+        if (!configuracionCoordinacion.isGestionConsulAutomatica()) {
+            LOGGER.debug("Sincronizacion de estado con Consul ignorada porque gestionConsulAutomatica=false");
+            return;
+        }
+
         try {
             Set<Integer> nodosActivosConsul = descubrimientoServicios.obtenerNodosActivosEnConsul();
             if (nodosActivosConsul.isEmpty()) {

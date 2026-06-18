@@ -38,6 +38,8 @@ coordinacion:
   sincronizacion-cristian-ms: 8000
   maximo-logs: 300
   ajustar-reloj-sistema: ${AJUSTAR_RELOJ_SISTEMA:true}
+  gestion-consul-automatica: ${GESTION_CONSUL_AUTOMATICA:false}
+  gestion-consul-automatica: ${GESTION_CONSUL_AUTOMATICA:false}
 
 management:
   endpoints:
