@@ -145,7 +145,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         agregarEventos(eventos, registroEventos.listar());
         nodos.values().stream()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
-                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO && nodo.getEstado() != EstadoNodo.SOSPECHOSO)
                 .forEach(nodo -> agregarEventos(eventos, consultaRemotaNodos.consultarEventosLocales(nodo)));
 
         return eventos.values().stream()
@@ -311,7 +311,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
 
         return obtenerCoordinador()
                 .filter(nodo -> nodo.getId() != configuracionNodoLocal.getId())
-                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO)
+                .filter(nodo -> nodo.getEstado() != EstadoNodo.INACTIVO && nodo.getEstado() != EstadoNodo.SOSPECHOSO)
                 .flatMap(consultaRemotaNodos::consultarEstadoExclusionLocal)
                 .orElseGet(this::obtenerEstadoExclusionMutuaLocal);
     }
@@ -841,7 +841,7 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         if (nodo.getId() == configuracionNodoLocal.getId()) {
             return nodo.copiar();
         }
-        if (nodo.getEstado() == EstadoNodo.INACTIVO) {
+        if (nodo.getEstado() == EstadoNodo.INACTIVO || nodo.getEstado() == EstadoNodo.SOSPECHOSO) {
             return nodo.copiar();
         }
 

@@ -19,8 +19,20 @@ spring:
         prefer-ip-address: true
         ip-address: ${GATEWAY_HOST:localhost}
     gateway:
+      httpclient:
+        connect-timeout: 1000
+        response-timeout: 3000
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - name: Retry
+          args:
+            retries: 3
+            series:
+              - SERVER_ERROR
+            exceptions:
+              - java.io.IOException
+              - java.net.ConnectException
+              - org.springframework.cloud.gateway.support.TimeoutException
       globalcors:
         cors-configurations:
           "[/**]":
