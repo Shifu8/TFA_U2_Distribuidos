@@ -548,9 +548,17 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         registrar("BULLY", "Nodo " + configuracionNodoLocal.getId() + " inicia eleccion. Motivo: " + motivo);
 
         List<NodoHospitalario> superiores = nodos.values().stream()
-                .filter(nodo -> nodo.getId() > configuracionNodoLocal.getId())
-                .sorted(Comparator.comparingInt(NodoHospitalario::getId))
-                .toList();
+            .filter(nodo -> nodo.getId() > configuracionNodoLocal.getId())
+            .filter(NodoHospitalario::esActivo)
+            .sorted(Comparator.comparingInt(NodoHospitalario::getId))
+            .toList();
+
+        if (superiores.isEmpty()) {
+            registrar("BULLY", "No hay nodos superiores activos. Nodo " + configuracionNodoLocal.getId() + " se convierte inmediatamente en coordinador.");
+            eleccionEnCurso.set(false);
+            convertirseEnCoordinador();
+            return;
+        }
 
         superiores.forEach(nodo -> enviarMensaje(nodo, TipoMensaje.ELECTION, "eleccion iniciada por nodo " + configuracionNodoLocal.getId()));
 
@@ -622,7 +630,9 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             if (destino != null) {
                 enviarMensaje(destino, TipoMensaje.ANSWER, "nodo " + configuracionNodoLocal.getId() + " responde ANSWER");
             }
-            iniciarEleccion("solicitud recibida desde nodo con ID menor");
+            if (!esCoordinadorLocal()) {
+                iniciarEleccion("solicitud recibida desde nodo con ID menor");
+            }
         }
     }
 
