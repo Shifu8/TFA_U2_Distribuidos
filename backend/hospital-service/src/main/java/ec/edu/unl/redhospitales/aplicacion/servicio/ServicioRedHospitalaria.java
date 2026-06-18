@@ -609,6 +609,11 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
             return;
         }
 
+        if (origen.getEstado() == EstadoNodo.INACTIVO) {
+            registrar("HEARTBEAT", "Ignorado heartbeat de nodo INACTIVO: " + mensaje.getIdNodoOrigen());
+            return;
+        }
+
         if (nodoLocal().esCoordinador() && mensaje.getIdNodoOrigen() < configuracionNodoLocal.getId()) {
             registrar("HEARTBEAT", "Heartbeat de coordinador menor recibido. Se conserva coordinador local");
             return;

@@ -33,7 +33,7 @@ nodes:
 
 coordinacion:
   heartbeat-ms: 2000
-  timeout-heartbeat-ms: ${TIMEOUT_HEARTBEAT_MS:15000}
+  timeout-heartbeat-ms: ${TIMEOUT_HEARTBEAT_MS:5000}
   espera-respuesta-eleccion-ms: 1800
   sincronizacion-cristian-ms: 8000
   maximo-logs: 300
