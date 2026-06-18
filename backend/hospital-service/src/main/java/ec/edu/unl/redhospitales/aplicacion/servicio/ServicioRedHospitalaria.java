@@ -533,6 +533,20 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
         }
     }
 
+    @Scheduled(fixedDelayString = "${coordinacion.sincronizacion-cristian-ms:8000}", initialDelayString = "${coordinacion.sincronizacion-cristian-ms:8000}")
+    public void sincronizarCristianProgramado() {
+        if (!estaOperativo() || esCoordinadorLocal()) {
+            return;
+        }
+
+        NodoHospitalario coordinador = nodos.get(idCoordinadorActual);
+        if (coordinador == null || !coordinador.esActivo()) {
+            return;
+        }
+
+        solicitarSincronizacionCristian("sincronizacion periodica al coordinador");
+    }
+
     private void iniciarEleccion(String motivo) {
         if (!estaOperativo()) {
             registrar("BULLY", "No se inicia eleccion porque el nodo local esta inactivo");

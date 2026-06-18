@@ -37,7 +37,7 @@ coordinacion:
   espera-respuesta-eleccion-ms: 1800
   sincronizacion-cristian-ms: 8000
   maximo-logs: 300
-  ajustar-reloj-sistema: ${AJUSTAR_RELOJ_SISTEMA:false}
+  ajustar-reloj-sistema: ${AJUSTAR_RELOJ_SISTEMA:true}
 
 management:
   endpoints:

@@ -13,7 +13,7 @@ public class ConfiguracionCoordinacion {
     private long esperaRespuestaEleccionMs = 1800;
     private long sincronizacionCristianMs = 8000;
     private int maximoLogs = 300;
-    private boolean ajustarRelojSistema = false;
+    private boolean ajustarRelojSistema = true;
 
     public long getHeartbeatMs() {
         return heartbeatMs;
