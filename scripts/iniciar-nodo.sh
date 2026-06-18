@@ -107,10 +107,7 @@ read_node_config() {
 
 read NODE_HOST NODE_TCP_PORT NODE_HTTP_PORT < <(read_node_config)
 
-CONSUL_HOST="${CONSUL_HOST:-}"
-if [[ -z "$CONSUL_HOST" ]]; then
-  CONSUL_HOST="$(NODE_ID=1 read_node_config | awk '{print $1}')"
-fi
+CONSUL_HOST="${CONSUL_HOST:-127.0.0.1}"
 
 es_principal=false
 if [[ "$NODE_ID" == "1" ]]; then
@@ -145,14 +142,7 @@ mostrar_plan_arranque() {
   linea
   echo "Arranque de Red de Hospitales - Nodo $NODE_ID"
   linea
-  if [[ "$es_principal" == true ]]; then
-    echo "Esta PC es la PRINCIPAL."
-    echo "Se iniciara: Consul + API Gateway + Frontend + Nodo 1."
-  else
-    echo "Esta PC es un nodo hospitalario secundario."
-    echo "Se iniciara solo el servicio del nodo $NODE_ID."
-    echo "El frontend, Consul y Gateway viven en la PC 1: $CONSUL_HOST."
-  fi
+  echo "Se iniciara localmente: Consul + API Gateway + Frontend + Nodo $NODE_ID."
   echo "Host del nodo: $NODE_HOST"
   echo "HTTP del nodo: $NODE_HTTP_PORT"
   echo "TCP del nodo:  $NODE_TCP_PORT"
@@ -239,31 +229,29 @@ if needs_backend_build; then
   mvn clean package -DskipTests
 fi
 
-if [[ "$es_principal" == true ]]; then
-  if ! command_exists consul; then
-    echo "Consul no esta instalado o no esta en PATH. Instala Consul antes de iniciar la PC principal."
-    exit 1
+if ! command_exists consul; then
+  echo "Consul no esta instalado o no esta en PATH. Instala Consul en esta PC."
+  exit 1
+fi
+
+start_background "consul" consul agent -dev -client=0.0.0.0
+wait_for_port "consul" "127.0.0.1" 8500 20
+
+start_background "gateway" env CONSUL_HOST="$CONSUL_HOST" GATEWAY_HOST="$NODE_HOST" \
+  "$JAVA_CMD" -jar "$ROOT_DIR/backend/api-gateway/target/api-gateway.jar" --server.port=8080
+wait_for_port "gateway" "127.0.0.1" 8080 60
+
+if command_exists npm; then
+  if [[ ! -d "$ROOT_DIR/frontend/node_modules" ]]; then
+    echo "Instalando dependencias del frontend..."
+    (cd "$ROOT_DIR/frontend" && npm install)
   fi
-
-  start_background "consul" consul agent -dev -client=0.0.0.0
-  wait_for_port "consul" "127.0.0.1" 8500 20
-
-  start_background "gateway" env CONSUL_HOST="$CONSUL_HOST" GATEWAY_HOST="$NODE_HOST" \
-    "$JAVA_CMD" -jar "$ROOT_DIR/backend/api-gateway/target/api-gateway.jar" --server.port=8080
-  wait_for_port "gateway" "127.0.0.1" 8080 60
-
-  if command_exists npm; then
-    if [[ ! -d "$ROOT_DIR/frontend/node_modules" ]]; then
-      echo "Instalando dependencias del frontend..."
-      (cd "$ROOT_DIR/frontend" && npm install)
-    fi
-    start_background "frontend-vite" npm --prefix "$ROOT_DIR/frontend" run dev -- \
-      --host 0.0.0.0 --port 5173 --strictPort
-    wait_for_port "frontend-vite" "127.0.0.1" 5173 30
-  else
-    echo "ERROR: npm no esta instalado. El nodo 1 necesita Node.js y npm para iniciar el frontend."
-    exit 1
-  fi
+  start_background "frontend-vite" npm --prefix "$ROOT_DIR/frontend" run dev -- \
+    --host 0.0.0.0 --port 5173 --strictPort
+  wait_for_port "frontend-vite" "127.0.0.1" 5173 30
+else
+  echo "ERROR: npm no esta instalado. Esta PC necesita Node.js y npm para iniciar el frontend."
+  exit 1
 fi
 
 NODE_ENV=(
@@ -294,31 +282,22 @@ echo "Nodo $NODE_ID iniciado correctamente"
 linea
 echo "API del nodo:      http://$NODE_HOST:$NODE_HTTP_PORT"
 echo "TCP del nodo:      $NODE_TCP_PORT"
-echo "Consul principal:  http://$CONSUL_HOST:8500/ui"
-if [[ "$es_principal" == true ]]; then
-  echo ""
-  echo "Abrir en esta PC:"
-  echo "  Panel web:        http://localhost:5173"
-  echo "  API Gateway:      http://localhost:8080"
-  echo "  Consul UI:        http://localhost:8500/ui"
-  echo ""
-  echo "Abrir desde otras PCs de la misma red:"
-  echo "  Panel web:        http://$NODE_HOST:5173"
-  echo "  API Gateway:      http://$NODE_HOST:8080"
-  echo "  Consul UI:        http://$NODE_HOST:8500/ui"
-  echo ""
-  echo "Si el panel no abre desde otra PC, revisa que esa PC use la IP de la PC 1 y no localhost."
-else
-  echo ""
-  echo "Este nodo ya quedo conectado a la red."
-  echo "Para ver el dashboard, abre en el navegador:"
-  echo "  http://$CONSUL_HOST:5173"
-fi
+echo "Consul local:      http://$CONSUL_HOST:8500/ui"
+
+echo ""
+echo "Abrir en esta PC:"
+echo "  Panel web:        http://localhost:5173"
+echo "  API Gateway:      http://localhost:8080"
+echo "  Consul UI:        http://localhost:8500/ui"
+echo ""
+echo "Abrir desde otras PCs de la misma red:"
+echo "  Panel web:        http://$NODE_HOST:5173"
+echo "  API Gateway:      http://$NODE_HOST:8080"
+echo "  Consul UI:        http://$NODE_HOST:8500/ui"
+
 echo ""
 echo "Logs utiles:"
 echo "  tail -f $LOG_DIR/node$NODE_ID.out.log"
-if [[ "$es_principal" == true ]]; then
-  echo "  tail -f $LOG_DIR/frontend-vite.out.log"
-  echo "  tail -f $LOG_DIR/gateway.out.log"
-fi
+echo "  tail -f $LOG_DIR/frontend-vite.out.log"
+echo "  tail -f $LOG_DIR/gateway.out.log"
 linea

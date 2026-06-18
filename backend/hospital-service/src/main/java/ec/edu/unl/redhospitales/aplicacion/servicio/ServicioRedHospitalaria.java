@@ -503,6 +503,12 @@ public class ServicioRedHospitalaria implements PuertoManejadorMensajesTcp {
                 return;
             }
 
+            // Si solo nos detectamos a nosotros mismos en Consul, asumimos que es un Consul local
+            // y no marcamos a los demas como inactivos.
+            if (nodosActivosConsul.size() == 1 && nodosActivosConsul.contains(configuracionNodoLocal.getId())) {
+                return;
+            }
+
             boolean coordinadorSeCayo = false;
 
             for (NodoHospitalario nodo : nodos.values()) {

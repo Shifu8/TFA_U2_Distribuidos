@@ -210,20 +210,13 @@ if (-not $node1) {
 $NodeHost = if ($node.host) { [string]$node.host } else { "localhost" }
 $NodeTcpPort = if ($node.tcpPort) { [int]$node.tcpPort } elseif ($node.port) { [int]$node.port } else { 9000 + $NodeId }
 $NodeHttpPort = if ($node.httpPort) { [int]$node.httpPort } elseif ($node.apiPort) { [int]$node.apiPort } else { 8080 + $NodeId }
-$ConsulHost = if ($env:CONSUL_HOST) { $env:CONSUL_HOST } elseif ($node1.host) { [string]$node1.host } else { "localhost" }
+$ConsulHost = if ($env:CONSUL_HOST) { $env:CONSUL_HOST } else { "localhost" }
 $EsPrincipal = $NodeId -eq 1
 
 Linea
 Write-Host "Arranque de Red de Hospitales - Nodo $NodeId"
 Linea
-if ($EsPrincipal) {
-    Write-Host "Esta PC es la PRINCIPAL."
-    Write-Host "Se iniciara: Consul + API Gateway + Frontend + Nodo 1."
-} else {
-    Write-Host "Esta PC es un nodo secundario."
-    Write-Host "Se iniciara solo el servicio del nodo $NodeId."
-    Write-Host "El frontend, Consul y Gateway viven en la PC 1: $ConsulHost."
-}
+Write-Host "Se iniciara localmente: Consul + API Gateway + Frontend + Nodo $NodeId."
 Write-Host "Host del nodo: $NodeHost"
 Write-Host "HTTP del nodo: $NodeHttpPort"
 Write-Host "TCP del nodo:  $NodeTcpPort"
@@ -249,34 +242,32 @@ if (Test-BuildRequired -HospitalJar $hospitalJar -GatewayJar $gatewayJar) {
     }
 }
 
-if ($EsPrincipal) {
-    $consul = Get-RequiredCommand -Names @("consul.exe", "consul") -InstallHint "Instala Consul antes de iniciar la PC principal."
-    Start-Background -Name "consul" -FilePath $consul -ArgumentList @("agent", "-dev", "-client=0.0.0.0")
-    Wait-ForPort -Name "consul" -HostName "127.0.0.1" -Port 8500 -TimeoutSeconds 20
+$consul = Get-RequiredCommand -Names @("consul.exe", "consul") -InstallHint "Instala Consul en esta PC."
+Start-Background -Name "consul" -FilePath $consul -ArgumentList @("agent", "-dev", "-client=0.0.0.0")
+Wait-ForPort -Name "consul" -HostName "127.0.0.1" -Port 8500 -TimeoutSeconds 20
 
-    Start-Background `
-        -Name "gateway" `
-        -FilePath $java `
-        -ArgumentList @("-jar", $gatewayJar, "--server.port=8080") `
-        -Environment @{ CONSUL_HOST = $ConsulHost; GATEWAY_HOST = $NodeHost }
-    Wait-ForPort -Name "gateway" -HostName "127.0.0.1" -Port 8080 -TimeoutSeconds 60
+Start-Background `
+    -Name "gateway" `
+    -FilePath $java `
+    -ArgumentList @("-jar", $gatewayJar, "--server.port=8080") `
+    -Environment @{ CONSUL_HOST = $ConsulHost; GATEWAY_HOST = $NodeHost }
+Wait-ForPort -Name "gateway" -HostName "127.0.0.1" -Port 8080 -TimeoutSeconds 60
 
-    $npm = Get-RequiredCommand -Names @("npm.cmd", "npm") -InstallHint "Instala Node.js y npm para iniciar el frontend."
-    $frontendDir = Join-Path $RootDir "frontend"
-    if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
-        Write-Host "Instalando dependencias del frontend..."
-        & $npm --prefix $frontendDir install
-        if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-        }
+$npm = Get-RequiredCommand -Names @("npm.cmd", "npm") -InstallHint "Instala Node.js y npm para iniciar el frontend."
+$frontendDir = Join-Path $RootDir "frontend"
+if (-not (Test-Path (Join-Path $frontendDir "node_modules"))) {
+    Write-Host "Instalando dependencias del frontend..."
+    & $npm --prefix $frontendDir install
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
     }
-
-    Start-Background `
-        -Name "frontend-vite" `
-        -FilePath $npm `
-        -ArgumentList @("--prefix", $frontendDir, "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173", "--strictPort")
-    Wait-ForPort -Name "frontend-vite" -HostName "127.0.0.1" -Port 5173 -TimeoutSeconds 30
 }
+
+Start-Background `
+    -Name "frontend-vite" `
+    -FilePath $npm `
+    -ArgumentList @("--prefix", $frontendDir, "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173", "--strictPort")
+Wait-ForPort -Name "frontend-vite" -HostName "127.0.0.1" -Port 5173 -TimeoutSeconds 30
 
 Start-Background `
     -Name "node$NodeId" `
@@ -302,31 +293,22 @@ Write-Host "Nodo $NodeId iniciado correctamente"
 Linea
 Write-Host "API del nodo:      http://${NodeHost}:$NodeHttpPort"
 Write-Host "TCP del nodo:      $NodeTcpPort"
-Write-Host "Consul principal:  http://${ConsulHost}:8500/ui"
+Write-Host "Consul local:      http://${ConsulHost}:8500/ui"
 
-if ($EsPrincipal) {
-    Write-Host ""
-    Write-Host "Abrir en esta PC:"
-    Write-Host "  Panel web:        http://localhost:5173"
-    Write-Host "  API Gateway:      http://localhost:8080"
-    Write-Host "  Consul UI:        http://localhost:8500/ui"
-    Write-Host ""
-    Write-Host "Abrir desde otras PCs de la misma red:"
-    Write-Host "  Panel web:        http://${NodeHost}:5173"
-    Write-Host "  API Gateway:      http://${NodeHost}:8080"
-    Write-Host "  Consul UI:        http://${NodeHost}:8500/ui"
-} else {
-    Write-Host ""
-    Write-Host "Este nodo ya quedo conectado a la red."
-    Write-Host "Para ver el dashboard, abre:"
-    Write-Host "  http://${ConsulHost}:5173"
-}
+Write-Host ""
+Write-Host "Abrir en esta PC:"
+Write-Host "  Panel web:        http://localhost:5173"
+Write-Host "  API Gateway:      http://localhost:8080"
+Write-Host "  Consul UI:        http://localhost:8500/ui"
+Write-Host ""
+Write-Host "Abrir desde otras PCs de la misma red:"
+Write-Host "  Panel web:        http://${NodeHost}:5173"
+Write-Host "  API Gateway:      http://${NodeHost}:8080"
+Write-Host "  Consul UI:        http://${NodeHost}:8500/ui"
 
 Write-Host ""
 Write-Host "Logs utiles:"
 Write-Host "  Get-Content logs/node$NodeId.out.log -Tail 80"
-if ($EsPrincipal) {
-    Write-Host "  Get-Content logs/frontend-vite.out.log -Tail 80"
-    Write-Host "  Get-Content logs/gateway.out.log -Tail 80"
-}
+Write-Host "  Get-Content logs/frontend-vite.out.log -Tail 80"
+Write-Host "  Get-Content logs/gateway.out.log -Tail 80"
 Linea
