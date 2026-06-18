@@ -297,7 +297,11 @@ function App() {
     event.preventDefault();
     ejecutarAccion('donante', async () => {
       validarDonante();
-      const resultado = await fetchJson('/api/donors/compatibility', {
+      const url = nodoObjetivo 
+        ? `http://${nodoObjetivo.host}:${nodoObjetivo.httpPort}/api/donors/compatibility`
+        : '/api/donors/compatibility';
+
+      const resultado = await fetchJson(url, {
         method: 'POST',
         body: JSON.stringify({
           ...donante,
